@@ -3,6 +3,7 @@
 #include <array>
 #include <cassert>
 #include <cstdint>
+#include <filesystem>
 #include <format>
 #include <span>
 #include <stdexcept>
@@ -132,7 +133,7 @@ namespace Rtx
                     device, sizeof(Shaders::DlssInputConstants), VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT, "dlss constants");
             })
         {
-            const std::wstring path = L".";
+            const std::wstring path = std::filesystem::temp_directory_path().wstring();
             const NVSDK_NGX_Result init = NVSDK_NGX_VULKAN_Init_with_ProjectID(Dlss::sProjectId,
                 NVSDK_NGX_ENGINE_TYPE_CUSTOM, "OpenMW RTX", path.c_str(), device.getInstanceHandle(),
                 device.getPhysicalDevice().getHandle(), device.getHandle());
