@@ -276,9 +276,8 @@ namespace MWRender
         // session runs, so it does not belong in the periodic line; what that line carries is the
         // one word a reader of any single line needs, and the rest — at what pair of sizes — is here,
         // where it was chosen.
-        Log(Debug::Info) << "Ray tracing: upscaler "
-                         << Rtx::sUpscalerNames.name(setup.mRun.mProfile.mUpscaler) << ", upscale "
-                         << Rtx::sUpscaleNames.name(setup.mRun.mProfile.mUpscale);
+        Log(Debug::Info) << "Ray tracing: upscaler " << Rtx::sUpscalerNames.name(setup.mRun.mProfile.mUpscaler)
+                         << ", upscale " << Rtx::sUpscaleNames.name(setup.mRun.mProfile.mUpscale);
 
         // **A switch the player turned on for what this renderer declines is said once, with the
         // declaration's reason**: a second eye, a shader chain. Said and not refused, because

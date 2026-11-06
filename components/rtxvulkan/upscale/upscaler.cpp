@@ -116,8 +116,7 @@ namespace Rtx
         return mKind == UpscalerKind::Dlss ? mDlss->isBuilt() : mFsr->isBuilt();
     }
 
-    bool Upscaler::isAt(
-        const UpscalerKind kind, const VkExtent2D render, const VkExtent2D output) const
+    bool Upscaler::isAt(const UpscalerKind kind, const VkExtent2D render, const VkExtent2D output) const
     {
         if (kind != mKind)
             return false;

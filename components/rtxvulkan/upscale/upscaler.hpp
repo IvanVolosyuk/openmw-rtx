@@ -44,8 +44,7 @@ namespace Rtx
         static void declareShared(
             UpscalerKind kind, VkExtent2D render, VkExtent2D output, std::vector<ArenaImage>& into);
         static std::size_t getSharedCount(UpscalerKind kind);
-        static VkDeviceSize bytesAt(
-            const Device& device, UpscalerKind kind, VkExtent2D render, VkExtent2D output);
+        static VkDeviceSize bytesAt(const Device& device, UpscalerKind kind, VkExtent2D render, VkExtent2D output);
 
         void release();
 
@@ -55,8 +54,7 @@ namespace Rtx
         void reset();
         bool isFresh() const;
 
-        HandedImage record(
-            UpscalerKind kind, VkCommandBuffer commands, const UpscaleInputs& inputs, GpuTimer* timer);
+        HandedImage record(UpscalerKind kind, VkCommandBuffer commands, const UpscaleInputs& inputs, GpuTimer* timer);
 
         /// One line for `info`: which upscaler this renderer has.
         std::string_view describe() const;

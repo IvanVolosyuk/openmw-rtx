@@ -54,8 +54,8 @@ namespace Rtx
 
         /// The layout NGX is documented to read its inputs in, and the one it leaves its output in.
         /// The evaluation may change either while it runs and promises to put them back.
-        constexpr ImageUse sDlssRead{ VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
-            VK_PIPELINE_STAGE_2_ALL_COMMANDS_BIT, VK_ACCESS_2_SHADER_SAMPLED_READ_BIT };
+        constexpr ImageUse sDlssRead{ VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL, VK_PIPELINE_STAGE_2_ALL_COMMANDS_BIT,
+            VK_ACCESS_2_SHADER_SAMPLED_READ_BIT };
         constexpr ImageUse sDlssWrite{ VK_IMAGE_LAYOUT_GENERAL, VK_PIPELINE_STAGE_2_ALL_COMMANDS_BIT,
             VK_ACCESS_2_SHADER_STORAGE_WRITE_BIT };
 
@@ -128,8 +128,8 @@ namespace Rtx
             : mDevice(device)
             , mInputs(device, sInputBindings, {}, "dlssinputs.comp.spv", "dlss inputs")
             , mBlocks([&](const FrameSlot) {
-                return Buffer::hostWritten(device, sizeof(Shaders::DlssInputConstants),
-                    VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT, "dlss constants");
+                return Buffer::hostWritten(
+                    device, sizeof(Shaders::DlssInputConstants), VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT, "dlss constants");
             })
         {
             const std::wstring path = L".";
@@ -148,8 +148,7 @@ namespace Rtx
             }
 
             int available = 0;
-            const NVSDK_NGX_Result queried
-                = mParameters->Get(NVSDK_NGX_Parameter_SuperSampling_Available, &available);
+            const NVSDK_NGX_Result queried = mParameters->Get(NVSDK_NGX_Parameter_SuperSampling_Available, &available);
             if (NVSDK_NGX_FAILED(queried) || available == 0)
             {
                 NVSDK_NGX_VULKAN_DestroyParameters(mParameters);
@@ -216,8 +215,7 @@ namespace Rtx
 
     DlssUpscaler::~DlssUpscaler() = default;
 
-    void DlssUpscaler::declareShared(
-        const VkExtent2D, const VkExtent2D output, std::vector<ArenaImage>& into)
+    void DlssUpscaler::declareShared(const VkExtent2D, const VkExtent2D output, std::vector<ArenaImage>& into)
     {
         into.push_back(ArenaImage{ .mDescription = outputDescription(output),
             .mSpan = spanOf(FrameStep::Upscale, FrameStep::Display),
@@ -229,17 +227,14 @@ namespace Rtx
         return 1;
     }
 
-    VkDeviceSize DlssUpscaler::bytesAt(
-        const Device& device, const VkExtent2D render, const VkExtent2D)
+    VkDeviceSize DlssUpscaler::bytesAt(const Device& device, const VkExtent2D render, const VkExtent2D)
     {
-        return Image::bytesFor(device, depthDescription(render))
-            + Image::bytesFor(device, motionDescription(render));
+        return Image::bytesFor(device, depthDescription(render)) + Image::bytesFor(device, motionDescription(render));
     }
 
     void DlssUpscaler::resize(const VkExtent2D render, const VkExtent2D output, const ArenaRun& shared)
     {
-        assert(render.width > 0 && render.height > 0 && output.width >= render.width
-            && output.height >= render.height);
+        assert(render.width > 0 && render.height > 0 && output.width >= render.width && output.height >= render.height);
         assert(shared.size() == 1 && "the DLSS upscaler's shared image was not placed as it declared it");
 
         if (isAt(render, output))
@@ -270,8 +265,7 @@ namespace Rtx
 
         NVSDK_NGX_Result result = NVSDK_NGX_Result_Fail;
         mDevice.getPool().submitAndWait([&](VkCommandBuffer commands) {
-            result = NGX_VULKAN_CREATE_DLSS_EXT(
-                commands, 1, 1, &mTargets->mFeature, mContext->mParameters, &create);
+            result = NGX_VULKAN_CREATE_DLSS_EXT(commands, 1, 1, &mTargets->mFeature, mContext->mParameters, &create);
         });
 
         if (NVSDK_NGX_FAILED(result) || mTargets->mFeature == nullptr)
@@ -289,14 +283,12 @@ namespace Rtx
 
     bool DlssUpscaler::isAt(const VkExtent2D render, const VkExtent2D output) const
     {
-        const auto same = [](const VkExtent2D a, const VkExtent2D b) {
-            return a.width == b.width && a.height == b.height;
-        };
+        const auto same
+            = [](const VkExtent2D a, const VkExtent2D b) { return a.width == b.width && a.height == b.height; };
         return mTargets != nullptr && same(mTargets->mRender, render) && same(mTargets->mOutput, output);
     }
 
-    HandedImage DlssUpscaler::record(
-        const VkCommandBuffer commands, const UpscaleInputs& inputs, GpuTimer* timer)
+    HandedImage DlssUpscaler::record(const VkCommandBuffer commands, const UpscaleInputs& inputs, GpuTimer* timer)
     {
         const GpuZone timed(timer, commands, FrameZone::Upscale);
 

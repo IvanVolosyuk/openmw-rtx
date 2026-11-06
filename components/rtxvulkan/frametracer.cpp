@@ -40,8 +40,8 @@ namespace Rtx
         const bool traceMoves = render.width != mChain.getWidth() || render.height != mChain.getHeight();
         return Moves{
             .mTrace = mChain.isBuilt() && traceMoves,
-            .mUpscaler = mUpscaler.isBuilt(upscaler)
-                && !(upscales(upscale) && mUpscaler.isAt(upscaler, render, output)),
+            .mUpscaler
+            = mUpscaler.isBuilt(upscaler) && !(upscales(upscale) && mUpscaler.isAt(upscaler, render, output)),
             .mArena = declared != mDeclared,
         };
     }

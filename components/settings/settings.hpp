@@ -268,8 +268,7 @@ namespace Settings
     }
 
     template <>
-    inline Rtx::UpscalerKind Manager::getImpl<Rtx::UpscalerKind>(
-        std::string_view setting, std::string_view category)
+    inline Rtx::UpscalerKind Manager::getImpl<Rtx::UpscalerKind>(std::string_view setting, std::string_view category)
     {
         return Rtx::sUpscalerNames.require(getString(setting, category), "an upscaler");
     }

@@ -48,7 +48,6 @@ namespace Rtx::Dlss
         NVSDK_NGX_FeatureRequirement requirement{};
         const NVSDK_NGX_Result result
             = NVSDK_NGX_VULKAN_GetFeatureRequirements(instance, physicalDevice, &info, &requirement);
-        return NVSDK_NGX_SUCCEED(result)
-            && requirement.FeatureSupported == NVSDK_NGX_FeatureSupportResult_Supported;
+        return NVSDK_NGX_SUCCEED(result) && requirement.FeatureSupported == NVSDK_NGX_FeatureSupportResult_Supported;
     }
 }
