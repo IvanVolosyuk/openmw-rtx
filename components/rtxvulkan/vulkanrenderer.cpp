@@ -39,6 +39,7 @@
 #include <components/rtx/world/fogbuilder.hpp>
 #include <components/rtx/world/frameworld.hpp>
 #include <components/rtxvulkan/device/commands.hpp>
+#include <components/rtxvulkan/device/dlss.hpp>
 #include <components/rtxvulkan/device/memory/frameslots.hpp>
 #include <components/rtxvulkan/device/memory/image.hpp>
 #include <components/rtxvulkan/device/memory/imagearena.hpp>
@@ -102,6 +103,17 @@ namespace Rtx
             return Surface::getInstanceExtensions();
         }
 
+        /// What NGX needs on the instance, asked before the instance exists: its discovery call
+        /// says "before `vkCreateInstance`", and a missing extension would otherwise turn into a
+        /// feature that cannot be created after the device is already made.
+        std::vector<std::string> dlssInstanceExtensionsFor(const RendererOptions& options)
+        {
+            if (!Dlss::sCompiled || options.mRun.mProfile.mUpscaler == UpscalerKind::Fsr)
+                return {};
+
+            return Dlss::requiredInstanceExtensions();
+        }
+
         /// Whether a queue family presents to `surface`, or nothing to ask for no window.
         PhysicalDevice::PresentQuery presentsTo(const Surface* surface)
         {
@@ -114,7 +126,7 @@ namespace Rtx
     }
 
     VulkanRenderer::VulkanRenderer(const RendererOptions& options)
-        : mInstance(options.mRun.mValidation, surfaceExtensionsFor(options))
+        : mInstance(options.mRun.mValidation, surfaceExtensionsFor(options), dlssInstanceExtensionsFor(options))
         , mSurface(options.mWindow != nullptr ? std::make_unique<Surface>(mInstance, options.mWindow) : nullptr)
         , mDevice(mInstance, PhysicalDevice::select(mInstance.getHandle(), presentsTo(mSurface.get())),
               options.mShaders, PipelineCacheSpec{ .mDirectory = options.mCacheDirectory },

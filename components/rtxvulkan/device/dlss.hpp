@@ -16,6 +16,10 @@ namespace Rtx::Dlss
     /// serves, and changing it starts NGX's choices for this application over.
     inline constexpr const char* sProjectId = "4f3c1d2e-7a6b-4c58-9e0f-1a2b3c4d5e6f";
 
+    /// The instance extensions NGX needs for DLSS on this driver, which the instance must enable
+    /// before it is made. Asked before there is an instance, which is why it takes none.
+    std::vector<std::string> requiredInstanceExtensions();
+
     /// The device extensions NGX needs for DLSS on this driver, which a device must enable before
     /// it is made. Empty where NGX cannot answer, which leaves feature creation to report why.
     std::vector<std::string> requiredDeviceExtensions(VkInstance instance, VkPhysicalDevice physicalDevice);

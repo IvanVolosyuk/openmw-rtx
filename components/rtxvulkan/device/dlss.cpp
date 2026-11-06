@@ -25,6 +25,22 @@ namespace Rtx::Dlss
         }
     }
 
+    std::vector<std::string> requiredInstanceExtensions()
+    {
+        NVSDK_NGX_FeatureDiscoveryInfo info = discovery();
+        std::uint32_t count = 0;
+        VkExtensionProperties* properties = nullptr;
+        if (NVSDK_NGX_FAILED(NVSDK_NGX_VULKAN_GetFeatureInstanceExtensionRequirements(&info, &count, &properties))
+            || properties == nullptr)
+            return {};
+
+        std::vector<std::string> names;
+        names.reserve(count);
+        for (std::uint32_t at = 0; at < count; ++at)
+            names.emplace_back(properties[at].extensionName);
+        return names;
+    }
+
     std::vector<std::string> requiredDeviceExtensions(const VkInstance instance, const VkPhysicalDevice physicalDevice)
     {
         NVSDK_NGX_FeatureDiscoveryInfo info = discovery();
