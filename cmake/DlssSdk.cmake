@@ -16,6 +16,7 @@ set(OPENMW_DLSS_VERSION "310.9.16" CACHE STRING "NVIDIA DLSS SDK release to down
 set(OPENMW_DLSS_INCLUDE_DIR "")
 set(OPENMW_DLSS_LIBRARY "")
 set(OPENMW_DLSS_RUNTIME_FILE "")
+set(OPENMW_DLSS_LICENSE "")
 
 if (OPENMW_RTX_DLSS)
     if (OPENMW_DLSS_SDK)
@@ -80,11 +81,17 @@ if (OPENMW_RTX_DLSS)
         if (OPENMW_RTX_DLSS)
             openmw_dlss_download("${_lib}" "${_lib_hash}" "${_dlss_root}/${_lib}")
             openmw_dlss_download("${_runtime}" "${_runtime_hash}" "${_dlss_root}/${_runtime}")
+            openmw_dlss_download("LICENSE.txt"
+                "d4216e39ebef5f9b50a6712ebb37beeb5379862a67733a9999c651f21592aaf0"
+                "${_dlss_root}/LICENSE.txt")
         endif ()
     endif ()
 
     if (OPENMW_RTX_DLSS)
         set(OPENMW_DLSS_INCLUDE_DIR "${_dlss_root}/include")
+        if (EXISTS "${_dlss_root}/LICENSE.txt")
+            set(OPENMW_DLSS_LICENSE "${_dlss_root}/LICENSE.txt")
+        endif ()
         if (WIN32)
             set(OPENMW_DLSS_LIBRARY "${_dlss_root}/lib/Windows_x86_64/x64/nvsdk_ngx_s.lib")
             set(OPENMW_DLSS_RUNTIME_FILE "${_dlss_root}/lib/Windows_x86_64/rel/nvngx_dlss.dll")

@@ -600,6 +600,10 @@ if (OPENMW_RTX_DLSS)
     target_include_directories(openmw-rtx-vulkan SYSTEM PRIVATE "${OPENMW_DLSS_INCLUDE_DIR}")
     target_link_libraries(openmw-rtx-vulkan PRIVATE openmw-rtx-dlss)
     install(FILES "${OPENMW_DLSS_RUNTIME_FILE}" DESTINATION "${CMAKE_INSTALL_BINDIR}")
+    if (OPENMW_DLSS_LICENSE)
+        install(FILES "${OPENMW_DLSS_LICENSE}" DESTINATION "${CMAKE_INSTALL_DOCDIR}/licenses"
+            RENAME "NVIDIA-RTX-SDK.txt")
+    endif ()
     set(OPENMW_DLSS_RUNTIME_FILE "${OPENMW_DLSS_RUNTIME_FILE}" CACHE INTERNAL "DLSS runtime beside the game")
 endif ()
 

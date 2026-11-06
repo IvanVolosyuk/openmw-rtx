@@ -20,6 +20,10 @@ ELSEWHERE = {
     "components/toutf8/geniconv.cpp",
     # The catcher of a build with `OPENMW_CRASHPAD` off.
     "components/crashcatcher/crashunsupported.cpp",
+    # The upscaler of a build with `OPENMW_RTX_DLSS` off: the FSR-only renderer keeps the same
+    # interface and refuses the DLSS choice by name.
+    "components/rtxvulkan/device/dlssstub.cpp",
+    "components/rtxvulkan/upscale/dlssupscalerstub.cpp",
 }
 
 # Upstream's wizard unpacks the installer's archives with libunshield on every system but Windows,
