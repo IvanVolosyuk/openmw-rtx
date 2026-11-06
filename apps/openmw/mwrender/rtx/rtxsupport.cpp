@@ -102,6 +102,7 @@ namespace MWRender
             { "RTX", "indirect lighting", {} },
             { "RTX", "specular map layout", {} },
             { "RTX", "upscale", {} },
+            { "RTX", "upscaler", {} },
             { "Shaders", "adjust coverage for alpha test", sAlphaTest },
             { "Shaders", "antialias alpha test", sAlphaTest },
             { "Shaders", "apply lighting to environment maps", {} },

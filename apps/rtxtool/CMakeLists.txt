@@ -150,6 +150,12 @@ if (BUILD_OPENMW)
 
     target_link_libraries(openmw-rtxtool openmw-rtxtool-lib openmw-lib)
 
+    if (OPENMW_RTX_DLSS AND OPENMW_DLSS_RUNTIME_FILE)
+        add_custom_command(TARGET openmw-rtxtool POST_BUILD
+            COMMAND ${CMAKE_COMMAND} -E copy_if_different "${OPENMW_DLSS_RUNTIME_FILE}"
+                "$<TARGET_FILE_DIR:openmw-rtxtool>")
+    endif ()
+
     # Beside the bundle and not in it: on macOS every program is built into the bundle, which is
     # installed whole, and the harness only ever runs from the tree that built it. A multi-config
     # generator adds the configuration's directory to this as it does to every other program's.
