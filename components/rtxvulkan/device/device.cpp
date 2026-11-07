@@ -127,6 +127,12 @@ namespace Rtx
             mDlssSupported = Dlss::isSupported(instance.getHandle(), mPhysicalDevice.getHandle());
             if (mDlssSupported)
                 dlssExtensions = Dlss::requiredDeviceExtensions(instance.getHandle(), mPhysicalDevice.getHandle());
+
+            std::string named;
+            for (const std::string& extension : dlssExtensions)
+                named += (named.empty() ? "" : ", ") + extension;
+            Log(Debug::Info) << "NVIDIA DLSS: " << (mDlssSupported ? "supported" : "not supported")
+                             << (named.empty() ? "" : ", NGX asks for " + named);
         }
 
         const std::span<const char* const> required = getRequiredDeviceExtensions();
