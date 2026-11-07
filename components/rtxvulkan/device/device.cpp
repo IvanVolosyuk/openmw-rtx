@@ -122,16 +122,22 @@ namespace Rtx
         // discovery record the upscaler later initialises with, so a card that fails here never
         // reaches feature creation.
         std::vector<std::string> dlssExtensions;
-        if (mReport.mDlss && Dlss::sCompiled)
+        constexpr std::uint32_t sNvidiaVendor = 0x10DE;
+        if (mReport.mDlss && Dlss::sCompiled
+            && mPhysicalDevice.getProperties().mProperties2.properties.vendorID == sNvidiaVendor)
         {
-            mDlssSupported = Dlss::isSupported(instance.getHandle(), mPhysicalDevice.getHandle());
-            if (mDlssSupported)
-                dlssExtensions = Dlss::requiredDeviceExtensions(instance.getHandle(), mPhysicalDevice.getHandle());
+            // **Tried on every NVIDIA card the build has NGX for**, even where the feature query
+            // is not sure: the query before a device exists is the SDK's own pre-device path, but
+            // a false negative there must not silently cost an RTX card its upscaler. Feature
+            // creation is the real answer, and `Auto` falls back to FSR if it refuses.
+            mDlssSupported = true;
+            dlssExtensions = Dlss::requiredDeviceExtensions(instance.getHandle(), mPhysicalDevice.getHandle());
+            const bool queried = Dlss::isSupported(instance.getHandle(), mPhysicalDevice.getHandle());
 
             std::string named;
             for (const std::string& extension : dlssExtensions)
                 named += (named.empty() ? "" : ", ") + extension;
-            Log(Debug::Info) << "NVIDIA DLSS: " << (mDlssSupported ? "supported" : "not supported")
+            Log(Debug::Info) << "NVIDIA DLSS: trying (feature query " << (queried ? "supported" : "inconclusive") << ')'
                              << (named.empty() ? "" : ", NGX asks for " + named);
         }
 
