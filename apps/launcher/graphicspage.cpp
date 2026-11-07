@@ -36,6 +36,13 @@ namespace
     } };
     static_assert(Rtx::followsMenu(sUpscaleLabels, Rtx::sUpscaleMenu));
 
+    constexpr std::array<Rtx::MenuLabel<Rtx::UpscalerKind>, Rtx::sUpscalerMenu.size()> sUpscalerLabels{ {
+        { Rtx::UpscalerKind::Auto, QT_TRANSLATE_NOOP("GraphicsPage", "Auto") },
+        { Rtx::UpscalerKind::Fsr, QT_TRANSLATE_NOOP("GraphicsPage", "AMD FSR 3.1") },
+        { Rtx::UpscalerKind::Dlss, QT_TRANSLATE_NOOP("GraphicsPage", "NVIDIA DLSS") },
+    } };
+    static_assert(Rtx::followsMenu(sUpscalerLabels, Rtx::sUpscalerMenu));
+
     constexpr std::array<Rtx::MenuLabel<Rtx::SpecularLayout>, Rtx::sSpecularLayoutMenu.size()> sSpecularLayoutLabels{ {
         { Rtx::SpecularLayout::Classic,
             QT_TRANSLATE_NOOP("GraphicsPage", "Classic (Highlight Colour and Glossiness)") },
@@ -63,6 +70,7 @@ Launcher::GraphicsPage::GraphicsPage(QWidget* parent)
     customHeightSpinBox->setMaximum(res.height());
 
     addMenuItems<Rtx::Upscale>(rayTracingUpscaleComboBox, sUpscaleLabels);
+    addMenuItems<Rtx::UpscalerKind>(rayTracingUpscalerComboBox, sUpscalerLabels);
     addMenuItems<Rtx::SpecularLayout>(rayTracingSpecularMapsComboBox, sSpecularLayoutLabels);
     rayTracingDistantLandSpinBox->setRange(static_cast<int>(Settings::RTXCategory::sMinDistantLandCellsInMenu),
         static_cast<int>(Settings::RTXCategory::sMaxDistantLandCells));
@@ -133,6 +141,8 @@ bool Launcher::GraphicsPage::loadSettings()
     // The list offers every mode the setting can hold
     rayTracingUpscaleComboBox->setCurrentIndex(
         static_cast<int>(Rtx::menuIndex(Rtx::sUpscaleMenu, Settings::rtx().mUpscale.get()).value()));
+    rayTracingUpscalerComboBox->setCurrentIndex(
+        static_cast<int>(Rtx::menuIndex(Rtx::sUpscalerMenu, Settings::rtx().mUpscaler.get()).value()));
     rayTracingSpecularMapsComboBox->setCurrentIndex(
         static_cast<int>(Rtx::menuIndex(Rtx::sSpecularLayoutMenu, Settings::rtx().mSpecularMapLayout.get()).value()));
 
@@ -189,6 +199,10 @@ void Launcher::GraphicsPage::saveSettings()
         if (const std::optional<Rtx::Upscale> chosen
             = Rtx::menuValue(Rtx::sUpscaleMenu, static_cast<std::size_t>(chosenIndex)))
             Settings::rtx().mUpscale.set(*chosen);
+    if (const int chosenUpscaler = rayTracingUpscalerComboBox->currentIndex(); chosenUpscaler >= 0)
+        if (const std::optional<Rtx::UpscalerKind> chosen
+            = Rtx::menuValue(Rtx::sUpscalerMenu, static_cast<std::size_t>(chosenUpscaler)))
+            Settings::rtx().mUpscaler.set(*chosen);
     if (const int chosenLayout = rayTracingSpecularMapsComboBox->currentIndex(); chosenLayout >= 0)
         if (const std::optional<Rtx::SpecularLayout> chosen
             = Rtx::menuValue(Rtx::sSpecularLayoutMenu, static_cast<std::size_t>(chosenLayout)))

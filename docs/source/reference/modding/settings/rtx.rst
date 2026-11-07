@@ -59,7 +59,8 @@ runs.
    DLSS is the current SDK's model and preset, so NVIDIA's over-the-air updates reach a build that
    predates them: quality, balanced and native use the transformer preset K, performance preset M,
    and ultra performance preset L, which is DLSS 4.5 Super Resolution. Read once, where the renderer
-   is made.
+   is made: the launcher and the settings window offer all three, and the settings window says a
+   change needs a restart.
 
 .. omw-setting::
    :title: indirect lighting

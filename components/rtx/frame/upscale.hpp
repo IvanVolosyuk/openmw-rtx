@@ -34,6 +34,11 @@ namespace Rtx
         std::pair{ UpscalerKind::Dlss, std::string_view("dlss") },
     } };
 
+    /// The upscalers the launcher and the settings window offer, in the order both list them:
+    /// `auto` first, then the two concrete choices. Every value `sUpscalerNames` spells, in its
+    /// order, so a value added there stops the build until each menu gives it a label.
+    inline constexpr std::array<UpscalerKind, sUpscalerNames.mNames.size()> sUpscalerMenu = sUpscalerNames.values();
+
     /// How the frame gets from the size it is traced at to the size it is shown at — a quality
     /// level rather than a ratio, because the ratio is the upscaler's: `upscaleRatio`.
     enum class Upscale

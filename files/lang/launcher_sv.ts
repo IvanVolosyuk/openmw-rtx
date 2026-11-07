@@ -187,6 +187,18 @@
         <translation>Nativ</translation>
     </message>
     <message>
+        <source>Auto</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>AMD FSR 3.1</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>NVIDIA DLSS</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
         <source>Performance</source>
         <translation>Prestanda</translation>
     </message>
@@ -241,6 +253,14 @@
     <message>
         <source>Windowed</source>
         <translation>Fönster</translation>
+    </message>
+    <message>
+        <source>Upscaler</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>Which upscaler reconstructs the frame. Auto uses NVIDIA DLSS when the build has the SDK and the card supports it, and AMD FSR otherwise. DLSS refuses to start where it cannot run; FSR never looks for DLSS. A change takes effect the next time OpenMW starts.</source>
+        <translation type="unfinished"></translation>
     </message>
     <message>
         <source>How far out from the eye the world is built, in cells. The ray tracer builds what rays can reach, which is a different question from how far the camera sees.</source>

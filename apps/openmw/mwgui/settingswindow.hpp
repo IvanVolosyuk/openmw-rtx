@@ -49,6 +49,7 @@ namespace MWGui
         MyGUI::Button* mGmstOverridesL10n;
 
         MyGUI::ComboBox* mRayTracingUpscale;
+        MyGUI::ComboBox* mRayTracingUpscaler;
         MyGUI::ComboBox* mRayTracingSpecularMaps;
         MyGUI::ScrollBar* mRayTracingBounceRays;
 
@@ -90,6 +91,7 @@ namespace MWGui
         void onWindowModeChanged(MyGUI::ComboBox* sender, size_t pos);
         void onVSyncModeChanged(MyGUI::ComboBox* sender, size_t pos);
         void onRayTracingUpscaleChanged(MyGUI::ComboBox* sender, size_t pos);
+        void onRayTracingUpscalerChanged(MyGUI::ComboBox* sender, size_t pos);
         void onRayTracingSpecularMapsChanged(MyGUI::ComboBox* sender, size_t pos);
 
         void onRebindAction(MyGUI::Widget* sender);
