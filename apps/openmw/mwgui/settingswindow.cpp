@@ -271,6 +271,10 @@ namespace MWGui
         mRayTracingBounceRays->setUserString("SettingMax", MyGUI::utility::toString(mostRays));
         mRayTracingBounceRays->setScrollRange(static_cast<std::size_t>(mostRays));
 
+        MyGUI::ScrollView* rayTracingScroll;
+        getWidget(rayTracingScroll, "RayTracingScroll");
+        rayTracingScroll->setCanvasSize(420, 642);
+        rayTracingScroll->setVisibleHScroll(false);
         configureWidgets(mMainWidget, true);
 
         setTitle("#{OMWEngine:SettingsWindow}");

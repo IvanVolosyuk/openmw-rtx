@@ -342,8 +342,9 @@ namespace Rtx
             // loads. The graph's source is built the way the game builds one, `createLightSource`,
             // and both are phased by the id the graph's own node was given.
             for (const std::uint32_t packed : { 0x00000000u, 0x00808080u, 0x000080FFu, 0x00FFFFFFu })
-                for (const std::int32_t flags : std::initializer_list<std::int32_t>{
-                         0, ESM::Light::Flicker, ESM::Light::FlickerSlow, ESM::Light::Pulse, ESM::Light::PulseSlow })
+                for (const std::int32_t flags :
+                    std::initializer_list<std::int32_t>{ 0, ESM::Light::Fire, ESM::Light::Fire | ESM::Light::Pulse,
+                        ESM::Light::Flicker, ESM::Light::FlickerSlow, ESM::Light::Pulse, ESM::Light::PulseSlow })
                     for (const std::int32_t radius : { 100, 7 })
                         for (const double seconds : { 0.0, 0.375, 11.0 })
                         {
@@ -457,6 +458,57 @@ namespace Rtx
                 }
                 EXPECT_GT(mostMovement, 0.01f * steady.mSourceRadius);
                 EXPECT_GT(mostRadius - leastRadius, 0.01f * steady.mSourceRadius);
+            }
+        }
+
+        TEST(RtxLightBuilderTest, lampControlsAreIndependentAndAgreeAcrossGraphAndRecord)
+        {
+            const auto record = describe(307, 0x00FFFFFF, ESM::Light::Fire);
+            const auto graph = SceneUtil::createLightSource(record, ~0u, true, osg::Vec4f(0, 0, 0, 1));
+            const osg::Vec3f position(10, 20, 30);
+            const int id = graph->getId();
+            EXPECT_EQ(animationOf(record), SceneUtil::LightController::LT_Normal);
+            const Light early = *makeLight(record, position, 0.0, id).value();
+            const Light late = *makeLight(record, position, 1.375, id).value();
+            EXPECT_NE(early.mPosition, late.mPosition);
+            EXPECT_NE(early.mIntensity, late.mIntensity);
+            LampSettings settings;
+            settings.mFlicker = 0.0f;
+            settings.mMovement = 0.0f;
+            settings.mSizeVariation = 0.0f;
+            const Light stopped = *makeLight(record, position, 0.0, id, settings).value();
+            EXPECT_EQ(stopped.mIntensity, makeLight(osg::Vec3f(1, 1, 1), 307.0f, position).value()->mIntensity);
+            for (const double time : { 0.25, 1.375, 9000.0 })
+            {
+                const Light light = *makeLight(record, position, time, id, settings).value();
+                EXPECT_EQ(light.mIntensity, stopped.mIntensity);
+                EXPECT_EQ(light.mPosition, position);
+                EXPECT_EQ(light.mSourceRadius, stopped.mSourceRadius);
+            }
+            settings = {
+                .mSourceScale = 0.5f, .mFlicker = 2.0f, .mSpeed = 0.25f, .mMovement = 10.0f, .mSizeVariation = 0.8f
+            };
+            for (const double time : { 0.25, 1.375, 9000.0 })
+            {
+                const Light light = *makeLight(record, position, time, id, settings).value();
+                const Light byGraph = *makeLight(*graph, position, time, settings).value();
+                EXPECT_EQ(light.mIntensity, byGraph.mIntensity);
+                EXPECT_EQ(light.mPosition, byGraph.mPosition);
+                EXPECT_EQ(light.mSourceRadius, byGraph.mSourceRadius);
+                EXPECT_EQ(light.mReach, stopped.mReach);
+                auto resized = settings;
+                resized.mSourceScale *= 2.0f;
+                const Light larger = *makeLight(record, position, time, id, resized).value();
+                EXPECT_EQ(larger.mPosition, light.mPosition);
+                EXPECT_EQ(larger.mIntensity, light.mIntensity);
+                EXPECT_FLOAT_EQ(larger.mSourceRadius, light.mSourceRadius * 2.0f);
+                auto faster = settings;
+                faster.mSpeed *= 2.0f;
+                const Light fast = *makeLight(record, position, time, id, faster).value();
+                const Light later = *makeLight(record, position, time * 2.0, id, settings).value();
+                EXPECT_EQ(fast.mIntensity, later.mIntensity);
+                EXPECT_EQ(fast.mPosition, later.mPosition);
+                EXPECT_EQ(fast.mSourceRadius, later.mSourceRadius);
             }
         }
 

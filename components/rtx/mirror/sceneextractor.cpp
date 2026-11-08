@@ -825,7 +825,7 @@ namespace Rtx
         // hangs on has no geometry, which is a rasterizer's reason to skip a light, and a `LIGH`
         // whose mesh is empty still burns.
         const Misc::Result<std::optional<Light>, std::string_view> made
-            = makeLight(source, place.getTrans(), simulationTime);
+            = makeLight(source, place.getTrans(), simulationTime, mLampSettings);
         if (!made.isOk())
         {
             mScene.refusals().refuse(Refused::Lamp, source.getName(), made.error());

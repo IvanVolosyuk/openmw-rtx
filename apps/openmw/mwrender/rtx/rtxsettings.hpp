@@ -22,6 +22,7 @@ namespace MWRender
         Rtx::UpscalerKind mUpscaler = Rtx::UpscalerKind::Auto;
         bool mIndirectLighting = true;
         int mBounceRays = 1;
+        Rtx::LampSettings mLamps;
         float mDistantLandCells = 0.0f;
         float mViewingDistance = 0.0f;
         bool mObjectPaging = true;

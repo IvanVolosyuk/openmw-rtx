@@ -25,6 +25,17 @@ namespace Rtx
 {
     struct Material;
 
+    /// Frame-owned lamp controls. Source scale is relative to the sharpened source radius;
+    /// animation amplitudes and speed are independent of source size and illumination reach.
+    struct LampSettings
+    {
+        float mSourceScale = 1.0f;
+        float mFlicker = 1.0f;
+        float mSpeed = 1.0f;
+        float mMovement = 1.0f;
+        float mSizeVariation = 0.1f;
+    };
+
     /// Whether a `LIGH` reference standing in a cell casts at all, as the game rules it: off by
     /// default casts nothing, and every other record burns where it stands, carryable or not.
     bool castsWherePlaced(const SceneUtil::LightCommon& record);
@@ -45,8 +56,8 @@ namespace Rtx
     /// and no ambient, because `SceneUtil::addLight` hands its source none. `id` is the reference
     /// number's low word for a light no node carries, where the graph's is the node's own — so a
     /// lamp's phase changes once, on the frame its cell loads and the graph's node takes over.
-    Misc::Result<std::optional<Light>, std::string_view> makeLight(
-        const SceneUtil::LightCommon& record, const osg::Vec3f& position, double simulationTime, int id);
+    Misc::Result<std::optional<Light>, std::string_view> makeLight(const SceneUtil::LightCommon& record,
+        const osg::Vec3f& position, double simulationTime, int id, const LampSettings& settings = {});
 
     /// The same light from a colour and a radius: one conversion, so a record read off the content
     /// files and a `SceneUtil::LightSource` read off the graph cannot disagree about how bright a
@@ -55,10 +66,11 @@ namespace Rtx
     Misc::Result<std::optional<Light>, std::string_view> makeLight(
         const osg::Vec3f& colour, float radius, const osg::Vec3f& position);
 
+    /// Fire lamps without an explicit animation use a slow flame, preserving their mean power.
     /// The graph route, including the same clock-driven flame size and motion as the record
     /// route. A steady lamp is unchanged; a held lamp's position already follows its attachment.
-    Misc::Result<std::optional<Light>, std::string_view> makeLight(
-        const SceneUtil::LightSource& source, const osg::Vec3f& position, double simulationTime);
+    Misc::Result<std::optional<Light>, std::string_view> makeLight(const SceneUtil::LightSource& source,
+        const osg::Vec3f& position, double simulationTime, const LampSettings& settings = {});
 
     /// Whether a light in the game's scene graph makes a lamp that gives light: a radius over nought,
     /// and its recorded colour — the diffuse and the ambient, before any flicker or fade scales them

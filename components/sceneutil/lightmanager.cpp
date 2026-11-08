@@ -672,6 +672,7 @@ namespace SceneUtil
         , mSourceRadius(copy.mSourceRadius)
         , mActorFade(copy.mActorFade)
         , mLastAppliedFrame(copy.mLastAppliedFrame)
+        , mFire(copy.mFire)
     {
         mId = sLightId++;
 

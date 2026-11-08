@@ -69,6 +69,7 @@ namespace MWRender
     {
     public:
         explicit WorldMirror(const MirrorKnobs& knobs);
+        void setLampSettings(const Rtx::LampSettings& settings) { mLamps = settings; }
 
         /// Asserts the scene empty: a world detached has given every row back, and the one that
         /// did not is named here rather than found at the next frame's horizon. Not while an
@@ -199,6 +200,7 @@ namespace MWRender
 
         /// `MirrorKnobs::mDistantStatics`, which every frame's world says (`Rtx::CellWorld::mStatics`).
         bool mDistantStatics = true;
+        Rtx::LampSettings mLamps;
 
         Rtx::SceneExtractor mExtractor;
 

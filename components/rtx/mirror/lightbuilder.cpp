@@ -194,34 +194,45 @@ namespace Rtx
         // One clock and phase for intensity, source size and flutter. The slow bands move the
         // flame sideways; the brightness lifts it and opens it slightly, without changing reach.
         // No frame state is kept, so a paused simulation samples exactly the same lamp again.
-        LampVariation variationAt(SceneUtil::LightController::LightType type, int id, double simulationTime)
+        LampVariation variationAt(SceneUtil::LightController::LightType type, int id, double simulationTime,
+            const LampSettings& settings, bool fire)
         {
             LampVariation variation;
+            const bool fireOnly = type == SceneUtil::LightController::LT_Normal && fire;
+            if (fireOnly)
+                type = SceneUtil::LightController::LT_FlickerSlow;
             if (type == SceneUtil::LightController::LT_Normal)
                 return variation;
 
+            simulationTime *= settings.mSpeed;
             const float phase = lightPhase(id);
             variation.mBrightness = brightnessAt(type, phase, simulationTime);
             const float level = std::clamp((variation.mBrightness - sMiddle) / sSwing, -1.0f, 1.0f);
-            variation.mSourceScale = 1.0f + 0.1f * level;
+            variation.mSourceScale = 1.0f + settings.mSizeVariation * level;
+            variation.mBrightness = std::max(0.0f, sMiddle + (variation.mBrightness - sMiddle) * settings.mFlicker);
             if (type == SceneUtil::LightController::LT_Flicker || type == SceneUtil::LightController::LT_FlickerSlow)
             {
                 const float speed = type == SceneUtil::LightController::LT_FlickerSlow ? sSlowShare : 1.0f;
                 const float frequency = sTopBand * speed / (sBandRatio * sBandRatio);
                 variation.mOffset = osg::Vec3f(0.2f * band(simulationTime, frequency, phase, 0),
-                    0.2f * band(simulationTime, frequency / sBandRatio, phase, 1), 0.1f * level);
+                                        0.2f * band(simulationTime, frequency / sBandRatio, phase, 1), 0.1f * level)
+                    * settings.mMovement;
             }
+            // A formerly steady fire keeps its mean power; authored flicker retains its own mean.
+            if (fireOnly)
+                variation.mBrightness /= sMiddle;
             return variation;
         }
 
         Misc::Result<std::optional<Light>, std::string_view> animateLight(
-            Misc::Result<std::optional<Light>, std::string_view> made, const LampVariation& variation)
+            Misc::Result<std::optional<Light>, std::string_view> made, const LampVariation& variation,
+            const LampSettings& settings)
         {
             if (made.isOk() && made.value().has_value())
             {
                 Light& light = *made.value();
                 light.mPosition += variation.mOffset * light.mSourceRadius;
-                light.mSourceRadius *= variation.mSourceScale;
+                light.mSourceRadius *= variation.mSourceScale * settings.mSourceScale;
             }
             return made;
         }
@@ -408,23 +419,23 @@ namespace Rtx
     osg::Vec3f lightColour(const SceneUtil::LightSource& source, double simulationTime)
     {
         const SceneUtil::LightController* animation = source.getController();
-        const float brightness
-            = animation != nullptr ? lightBrightness(animation->getType(), source.getId(), simulationTime) : 1.0f;
-        return colourAtBrightness(source, brightness);
+        const auto type = animation != nullptr ? animation->getType() : SceneUtil::LightController::LT_Normal;
+        return colourAtBrightness(
+            source, variationAt(type, source.getId(), simulationTime, {}, source.isFire()).mBrightness);
     }
 
-    Misc::Result<std::optional<Light>, std::string_view> makeLight(
-        const SceneUtil::LightSource& source, const osg::Vec3f& position, const double simulationTime)
+    Misc::Result<std::optional<Light>, std::string_view> makeLight(const SceneUtil::LightSource& source,
+        const osg::Vec3f& position, const double simulationTime, const LampSettings& settings)
     {
         const SceneUtil::LightController* animation = source.getController();
         const SceneUtil::LightController::LightType type
             = animation != nullptr ? animation->getType() : SceneUtil::LightController::LT_Normal;
-        const LampVariation variation = variationAt(type, source.getId(), simulationTime);
+        const LampVariation variation = variationAt(type, source.getId(), simulationTime, settings, source.isFire());
         const osg::Vec3f colour = colourAtBrightness(source, variation.mBrightness);
         const float radius = source.getSourceRadius();
         return animateLight(
             isSpellLight(source) ? makeSpellLight(colour, radius, position) : makeLight(colour, radius, position),
-            variation);
+            variation, settings);
     }
 
     bool castsWherePlaced(const SceneUtil::LightCommon& record)
@@ -447,8 +458,8 @@ namespace Rtx
         return type;
     }
 
-    Misc::Result<std::optional<Light>, std::string_view> makeLight(
-        const SceneUtil::LightCommon& record, const osg::Vec3f& position, const double simulationTime, const int id)
+    Misc::Result<std::optional<Light>, std::string_view> makeLight(const SceneUtil::LightCommon& record,
+        const osg::Vec3f& position, const double simulationTime, const int id, const LampSettings& settings)
     {
         if (!castsWherePlaced(record))
             return std::nullopt;
@@ -457,13 +468,14 @@ namespace Rtx
         // negate on opposite sides of the sRGB conversion, so what they agree on is the sign, which
         // is the whole of what a refusal reads.
         const osg::Vec3f recorded = decodeColour(record.mColor);
-        const LampVariation variation = variationAt(animationOf(record), id, simulationTime);
+        const LampVariation variation = variationAt(animationOf(record), id, simulationTime, settings, record.mFire);
 
         // The minimum scene light radius is 16 in Morrowind, which `createLightSource` applies
         // before the walk ever reads the source's radius back.
         const float radius = std::max(record.mRadius, 16.0f);
 
         return animateLight(
-            makeLight((record.mNegative ? -recorded : recorded) * variation.mBrightness, radius, position), variation);
+            makeLight((record.mNegative ? -recorded : recorded) * variation.mBrightness, radius, position), variation,
+            settings);
     }
 }

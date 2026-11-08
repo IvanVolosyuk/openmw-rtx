@@ -739,6 +739,10 @@ namespace MWRender
     void RtxRenderer::applyChangedSettings(const Settings::CategorySettingVector& changed) noexcept
     {
         mPhase.expect(Phase::Between, Phase::Run);
+        const bool lamps = changed.contains({ "RTX", "lamp source size" })
+            || changed.contains({ "RTX", "lamp flicker strength" })
+            || changed.contains({ "RTX", "lamp animation speed" }) || changed.contains({ "RTX", "lamp movement" })
+            || changed.contains({ "RTX", "lamp size variation" });
         const bool upscale = changed.contains({ "RTX", "upscale" });
         const bool indirect = changed.contains({ "RTX", "indirect lighting" });
         const bool bounceRays = changed.contains({ "RTX", "bounce rays" });
@@ -746,7 +750,7 @@ namespace MWRender
             = changed.contains({ "RTX", "distant land cells" }) || changed.contains({ "Camera", "viewing distance" });
         const bool anisotropy = changed.contains({ "General", "anisotropy" });
         const bool gamma = changed.contains({ "Video", "gamma" });
-        if (!upscale && !indirect && !bounceRays && !reach && !anisotropy && !gamma)
+        if (!upscale && !indirect && !bounceRays && !reach && !anisotropy && !gamma && !lamps)
             return;
 
         // What asks is somebody choosing from a menu, so a value the derivation refuses is reported
@@ -761,6 +765,9 @@ namespace MWRender
             Log(Debug::Warning) << "Ray tracing kept the settings it had: " << refused.what();
             return;
         }
+
+        if (lamps)
+            mMirror.setLampSettings(settings->mMirror.mLamps);
 
         if (upscale)
             mUpscale = settings->mUpscale;
