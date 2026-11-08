@@ -77,6 +77,8 @@ namespace RtxTool
             /// What each of `sReconstructionSwitches` says, over a request's own defaults.
             Rtx::ReconstructionRequest mReconstruction;
 
+            Rtx::UpscalerKind mUpscaler = Rtx::UpscalerKind::Fsr;
+
             /// Which of the bounces' switches the line named: a window takes the rest from the player's
             /// settings, where its menu moves them.
             struct BouncesNamed
