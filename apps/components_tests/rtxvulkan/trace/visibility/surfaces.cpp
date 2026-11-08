@@ -2025,7 +2025,7 @@ namespace Rtx::Testing
             EXPECT_FLOAT_EQ(brightest, 0.2f);
             EXPECT_EQ(brightestFill, 0.0f) << "whose light is the fill whole, which no channel keeps apart";
 
-            for (const std::uint32_t rays : { 2u, 3u, 4u })
+            for (const std::uint32_t rays : { 2u, 3u, 4u, 8u, 16u })
             {
                 const std::vector<float> averaged = indirect(box(glow), rays);
                 ASSERT_EQ(averaged.size(), glowing.size());

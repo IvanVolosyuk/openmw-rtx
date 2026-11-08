@@ -52,6 +52,7 @@ namespace MWGui
         MyGUI::ComboBox* mRayTracingUpscaler;
         MyGUI::ComboBox* mRayTracingSpecularMaps;
         MyGUI::ScrollBar* mRayTracingBounceRays;
+        MyGUI::Widget* mRayTracingAntiFirefly;
 
         // controls
         MyGUI::ScrollView* mControlsBox;

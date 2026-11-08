@@ -53,6 +53,7 @@ namespace Settings
         /// `Rtx::SamplingSwitches::mIndirect`, handed to the renderer where it is made and again when
         /// the menu moves it, as the count below is.
         SettingValue<bool> mIndirectLighting{ mIndex, "RTX", "indirect lighting" };
+        SettingValue<bool> mAntiFirefly{ mIndex, "RTX", "anti firefly" };
 
         /// How many bounce rays the eye's surface traces a frame: `Rtx::SamplingSwitches::mBounceRays`.
         SettingValue<int> mBounceRays{ mIndex, "RTX", "bounce rays", makeClampSanitizerInt(1, sMaxBounceRays) };

@@ -22,7 +22,8 @@ namespace MWRender
                 .mUpscale = Rtx::Upscale::Balanced,
                 .mUpscaler = Rtx::UpscalerKind::Dlss,
                 .mIndirectLighting = false,
-                .mBounceRays = 3,
+                .mAntiFirefly = true,
+                .mBounceRays = 16,
                 .mDistantLandCells = 6.0f,
                 .mViewingDistance = 7168.0f,
                 .mObjectPaging = false,
@@ -46,7 +47,8 @@ namespace MWRender
             EXPECT_EQ(derived.mUpscale, Rtx::Upscale::Balanced);
             EXPECT_EQ(derived.mUpscaler, Rtx::UpscalerKind::Dlss);
             EXPECT_FALSE(derived.mIndirectLighting);
-            EXPECT_EQ(derived.mBounceRays, 3u);
+            EXPECT_EQ(derived.mBounceRays, 16u);
+            EXPECT_TRUE(derived.mAntiFirefly);
             // Cells and the viewing distance, which a worldspace's grid turns into units: six of
             // Morrowind's 8192 are 49152.
             EXPECT_EQ(derived.mMirror.mReach, (Rtx::LandReach{ .mCells = 6.0f, .mViewingDistance = 7168.0f }));
@@ -108,7 +110,7 @@ namespace MWRender
                 EXPECT_THROW(RtxSettings::derive(values), Rtx::InputError) << rays;
             }
 
-            for (const int rays : { 1, most })
+            for (const int rays : { 1, 4, 8, 16 })
             {
                 RtxSettingValues values = valid();
                 values.mBounceRays = rays;

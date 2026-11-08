@@ -265,6 +265,7 @@ namespace MWGui
         distantLand->setScrollRange(static_cast<std::size_t>(mostCells - fewestCells) + 1);
 
         // One ray to a step, up to the most the trace keeps a landing's list for
+        getWidget(mRayTracingAntiFirefly, "RayTracingAntiFireflyRow");
         getWidget(mRayTracingBounceRays, "RayTracingBounceRaysSlider");
         constexpr int mostRays = Settings::RTXCategory::sMaxBounceRays;
         mRayTracingBounceRays->setUserString("SettingMin", "1");
@@ -273,7 +274,7 @@ namespace MWGui
 
         MyGUI::ScrollView* rayTracingScroll;
         getWidget(rayTracingScroll, "RayTracingScroll");
-        rayTracingScroll->setCanvasSize(420, 642);
+        rayTracingScroll->setCanvasSize(420, 678);
         rayTracingScroll->setVisibleHScroll(false);
         configureWidgets(mMainWidget, true);
 
@@ -796,6 +797,8 @@ namespace MWGui
     {
         // Its value stays as it is, for when the box is ticked again.
         const bool traced = Settings::rtx().mIndirectLighting;
+        mRayTracingAntiFirefly->setEnabled(traced);
+        mRayTracingAntiFirefly->setAlpha(traced ? 1.0f : 0.5f);
         mRayTracingBounceRays->setEnabled(traced);
         mRayTracingBounceRays->setAlpha(traced ? 1.0f : 0.5f);
         getSliderLabel(mRayTracingBounceRays)->setAlpha(traced ? 1.0f : 0.5f);

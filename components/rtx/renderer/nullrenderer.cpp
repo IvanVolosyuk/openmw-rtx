@@ -161,6 +161,11 @@ namespace Rtx
         mProfile.mReconstruction.mSampling.mIndirect = traced;
     }
 
+    void NullRenderer::setAntiFirefly(const bool enabled)
+    {
+        mProfile.mReconstruction.mFilters.mAntiFirefly = enabled;
+    }
+
     void NullRenderer::setBounceRays(const std::uint32_t rays)
     {
         assert(rays >= 1 && rays <= Shaders::MAX_BOUNCE_RAYS);

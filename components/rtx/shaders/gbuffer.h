@@ -291,10 +291,9 @@ namespace Rtx::Shaders
     const uint STAGE_LANDING_RAY_ALONG = CHANNEL_COUNT + 9u;
 
     /// The most bounce rays the eye's surface traces a frame, `[RTX] bounce rays`'s top: the landing's
-    /// list keeps a head for each (`STAGE_DISPATCH_LANDING`). Four halves a bounce's noise,
-    /// `1 / sqrt(4)`, at four times its cost; eight cost the desk three times a frame of one ray
-    /// (`docs/rtx/research/2026-11-01-bounce-rays.md`).
-    const uint MAX_BOUNCE_RAYS = 4u;
+    /// list keeps a head for each (`STAGE_DISPATCH_LANDING`). Sixteen permits quieter indirect
+    /// light at a higher tracing cost; the configured count, not this capacity, controls the work.
+    const uint MAX_BOUNCE_RAYS = 16u;
 
     /// And the lists the later stages run over (`StageTiles`): a storage buffer, its head each
     /// list's indirect dispatch, a `VkDispatchIndirectCommand` and a word beside it that counts what

@@ -534,6 +534,11 @@ namespace Rtx
         mProfile.mReconstruction.mSampling.mIndirect = traced;
     }
 
+    void VulkanRenderer::setAntiFirefly(const bool enabled)
+    {
+        mProfile.mReconstruction.mFilters.mAntiFirefly = enabled;
+    }
+
     void VulkanRenderer::setBounceRays(const std::uint32_t rays)
     {
         assert(rays >= 1 && rays <= Shaders::MAX_BOUNCE_RAYS && "a count its reader should have refused");

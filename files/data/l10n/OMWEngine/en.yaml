@@ -187,3 +187,6 @@ LampSpeedValue: "Animation speed ({value}%)"
 LampMovementValue: "Flame movement ({value}%)"
 LampBreathingValue: "Source size variation ({value}%)"
 LampAnimationHint: "Applies immediately. Close the menu to see animation: lamps freeze while paused. Movement is independent of source radius."
+
+RayTracingAntiFirefly: "Anti-firefly filter"
+RayTracingAntiFireflyHint: "Suppresses sparkling indirect-light outliers. May dim genuine bounced light from glowing objects. Applies without restarting."

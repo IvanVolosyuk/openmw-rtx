@@ -22,6 +22,7 @@ namespace MWRender
             .mUpscale = Settings::rtx().mUpscale.get(),
             .mUpscaler = Settings::rtx().mUpscaler.get(),
             .mIndirectLighting = Settings::rtx().mIndirectLighting,
+            .mAntiFirefly = Settings::rtx().mAntiFirefly,
             .mBounceRays = Settings::rtx().mBounceRays,
             .mLamps = {
                 .mSourceScale = Settings::rtx().mLampSourceSize.get() / 25.0f,
@@ -61,6 +62,7 @@ namespace MWRender
             .mUpscale = values.mUpscale,
             .mUpscaler = values.mUpscaler,
             .mIndirectLighting = values.mIndirectLighting,
+            .mAntiFirefly = values.mAntiFirefly,
             .mBounceRays = static_cast<std::uint32_t>(values.mBounceRays),
             .mMirror = {
                 .mReach = { .mCells = values.mDistantLandCells, .mViewingDistance = values.mViewingDistance },

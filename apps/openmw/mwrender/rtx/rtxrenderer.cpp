@@ -174,7 +174,9 @@ namespace MWRender
                     .mProfile = {
                         .mUpscale = settings.mUpscale,
                         .mUpscaler = settings.mUpscaler,
-                        .mReconstruction = Rtx::ReconstructionRequest{ .mSampling = { .mIndirect = settings.mIndirectLighting, .mBounceRays = settings.mBounceRays } },
+                        .mReconstruction = Rtx::ReconstructionRequest{
+                            .mSampling = { .mIndirect = settings.mIndirectLighting, .mBounceRays = settings.mBounceRays },
+                            .mFilters = { .mAntiFirefly = settings.mAntiFirefly } },
                         .mAnisotropy = settings.mAnisotropy,
                         .mGamma = settings.mGamma,
                         .mLitEnvironmentMaps = settings.mLitEnvironmentMaps,
@@ -746,11 +748,12 @@ namespace MWRender
         const bool upscale = changed.contains({ "RTX", "upscale" });
         const bool indirect = changed.contains({ "RTX", "indirect lighting" });
         const bool bounceRays = changed.contains({ "RTX", "bounce rays" });
+        const bool antiFirefly = changed.contains({ "RTX", "anti firefly" });
         const bool reach
             = changed.contains({ "RTX", "distant land cells" }) || changed.contains({ "Camera", "viewing distance" });
         const bool anisotropy = changed.contains({ "General", "anisotropy" });
         const bool gamma = changed.contains({ "Video", "gamma" });
-        if (!upscale && !indirect && !bounceRays && !reach && !anisotropy && !gamma && !lamps)
+        if (!upscale && !indirect && !bounceRays && !reach && !anisotropy && !gamma && !lamps && !antiFirefly)
             return;
 
         // What asks is somebody choosing from a menu, so a value the derivation refuses is reported
@@ -789,6 +792,8 @@ namespace MWRender
 
         if (bounceRays)
             mRenderer->setBounceRays(settings->mBounceRays);
+        if (antiFirefly)
+            mRenderer->setAntiFirefly(settings->mAntiFirefly);
     }
 
     MyGUI::ITexture& RtxRenderer::freezeFrame() noexcept

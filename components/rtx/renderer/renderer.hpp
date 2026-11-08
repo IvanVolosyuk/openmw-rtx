@@ -519,6 +519,9 @@ namespace Rtx
         /// `Shaders::MAX_BOUNCE_RAYS`: a caller that reads it from a file refuses anything else first.
         virtual void setBounceRays(std::uint32_t rays) = 0;
 
+        /// Selects the existing outlier-suppression pass for subsequent frames, without rebuilding targets.
+        virtual void setAntiFirefly(bool enabled) = 0;
+
         /// How many of `set`'s kernels are made, waiting `patience` at most for the rest, and
         /// rethrowing what making one threw. The renderer starts making them as it is made, on
         /// threads of its own, and returns without them — ten seconds on a cold cache — so a host

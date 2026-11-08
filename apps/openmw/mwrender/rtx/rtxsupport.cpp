@@ -97,6 +97,7 @@ namespace MWRender
             { "Navigator", "nav mesh render mode", {} },
             { "Physics", "async num threads", {} },
             { "Post Processing", "", sPostProcessing },
+            { "RTX", "anti firefly", {} },
             { "RTX", "bounce rays", {} },
             { "RTX", "distant land cells", {} },
             { "RTX", "indirect lighting", {} },
