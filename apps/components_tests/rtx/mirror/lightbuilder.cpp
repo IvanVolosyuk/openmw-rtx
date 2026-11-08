@@ -354,8 +354,7 @@ namespace Rtx
                             const std::optional<Rtx::Light> fromRecord
                                 = makeLight(record, osg::Vec3f(1, 2, 3), seconds, graph->getId()).value();
                             const std::optional<Rtx::Light> fromGraph
-                                = makeLight(lightColour(*graph, seconds), graph->getSourceRadius(), osg::Vec3f(1, 2, 3))
-                                      .value();
+                                = makeLight(*graph, osg::Vec3f(1, 2, 3), seconds).value();
 
                             ASSERT_TRUE(fromRecord.has_value() && fromGraph.has_value())
                                 << "packed " << packed << " flags " << flags;
@@ -399,21 +398,20 @@ namespace Rtx
             // 100 * 2 + 128.
             EXPECT_FLOAT_EQ(light->mReach, 328.0f);
 
-            // A sixteenth of the record: 6.25 units, which is nine centimetres across at seventy
-            // units to the metre — a flame, and not the metre and a half the reach describes. Nothing
-            // around it is kept clear: a shadow ray runs to the flame.
-            EXPECT_FLOAT_EQ(light->mSourceRadius, 6.25f);
+            // A sixty-fourth of the record sets the finite source size without reducing the
+            // intensity or reach checked above. A shadow ray still runs to the flame.
+            EXPECT_FLOAT_EQ(light->mSourceRadius, 1.5625f);
             EXPECT_EQ(light->mClearance, 0.0f);
 
             // Doubling the radius quadruples the brightness, doubles the flame and rather less than
-            // doubles the reach: 200 * 200 * 0.25 * pi = 31415.9, 200 / 16 = 12.5, and
+            // doubles the reach: 200 * 200 * 0.25 * pi = 31415.9, 200 / 64 = 3.125, and
             // 200 * 2 + 128 = 528.
             const std::optional<Rtx::Light> larger
                 = makeLight(describe(200, 0x00FFFFFF, 0), osg::Vec3f(), 0.0, 1).value();
             ASSERT_TRUE(larger.has_value());
             EXPECT_NEAR(larger->mIntensity.x(), 31415.9f, 0.1f);
             EXPECT_FLOAT_EQ(larger->mReach, 528.0f);
-            EXPECT_FLOAT_EQ(larger->mSourceRadius, 12.5f);
+            EXPECT_FLOAT_EQ(larger->mSourceRadius, 3.125f);
             EXPECT_EQ(larger->mClearance, 0.0f);
 
             // The two readings of the record are one reading: an emitter of fixed radiance is
@@ -421,6 +419,69 @@ namespace Rtx
             // and a brazier to be the same fire at two scales rather than two arbitrary lamps.
             EXPECT_NEAR(larger->mIntensity.x() / light->mIntensity.x(),
                 (larger->mSourceRadius / light->mSourceRadius) * (larger->mSourceRadius / light->mSourceRadius), 1e-4f);
+        }
+
+        TEST(RtxLightBuilderTest, flameGeometryTracksBrightnessGentlyWithoutChangingReach)
+        {
+            const osg::Vec3f position(10, 20, 30);
+            const Light steady = *makeLight(describe(256, 0x00FFFFFF, 0), position, 0.0, 313).value();
+            for (const int flags : { ESM::Light::Flicker, ESM::Light::FlickerSlow })
+            {
+                const SceneUtil::LightCommon record = describe(256, 0x00FFFFFF, flags);
+                std::optional<Light> previous;
+                float mostMovement = 0.0f;
+                float leastRadius = steady.mSourceRadius;
+                float mostRadius = steady.mSourceRadius;
+                for (int frame = 0; frame < 600; ++frame)
+                {
+                    const double time = static_cast<double>(frame) / 60.0;
+                    const Light light = *makeLight(record, position, time, 313).value();
+                    EXPECT_EQ(light.mReach, steady.mReach);
+                    EXPECT_FLOAT_EQ(
+                        light.mIntensity.x(), steady.mIntensity.x() * lightBrightness(animationOf(record), 313, time));
+                    EXPECT_GE(light.mSourceRadius, 0.8999f * steady.mSourceRadius);
+                    EXPECT_LE(light.mSourceRadius, 1.1001f * steady.mSourceRadius);
+                    EXPECT_LE((light.mPosition - position).length(), 0.31f * steady.mSourceRadius);
+                    if (previous.has_value())
+                    {
+                        EXPECT_LE((light.mPosition - previous->mPosition).length(), 0.08f * steady.mSourceRadius);
+                        if (light.mIntensity.x() > previous->mIntensity.x() + 0.1f)
+                            EXPECT_GT(light.mSourceRadius, previous->mSourceRadius);
+                        if (light.mIntensity.x() < previous->mIntensity.x() - 0.1f)
+                            EXPECT_LT(light.mSourceRadius, previous->mSourceRadius);
+                    }
+                    mostMovement = std::max(mostMovement, (light.mPosition - position).length());
+                    leastRadius = std::min(leastRadius, light.mSourceRadius);
+                    mostRadius = std::max(mostRadius, light.mSourceRadius);
+                    previous = light;
+                }
+                EXPECT_GT(mostMovement, 0.01f * steady.mSourceRadius);
+                EXPECT_GT(mostRadius - leastRadius, 0.01f * steady.mSourceRadius);
+            }
+        }
+
+        TEST(RtxLightBuilderTest, aStoppedClockKeepsFlameGeometryStillAndSteadyLampsNeverMove)
+        {
+            const osg::Vec3f position(10, 20, 30);
+            for (const int flags : { 0, static_cast<int>(ESM::Light::FlickerSlow) })
+            {
+                const SceneUtil::LightCommon record = describe(256, 0x00FFFFFF, flags);
+                const Light held = *makeLight(record, position, 12.375, 313).value();
+                for (const double other : { 3.0, 123.5, 9000.25 })
+                {
+                    const Light moved = *makeLight(record, position, other, 313).value();
+                    const Light again = *makeLight(record, position, 12.375, 313).value();
+                    EXPECT_EQ(held.mPosition, again.mPosition);
+                    EXPECT_EQ(held.mSourceRadius, again.mSourceRadius);
+                    EXPECT_EQ(held.mIntensity, again.mIntensity);
+                    if (flags == 0)
+                    {
+                        EXPECT_EQ(moved.mPosition, position);
+                        EXPECT_EQ(moved.mSourceRadius, held.mSourceRadius);
+                        EXPECT_EQ(moved.mIntensity, held.mIntensity);
+                    }
+                }
+            }
         }
 
         /// An unlit record places a mesh and no light, a negative one takes light away, and a
@@ -455,8 +516,8 @@ namespace Rtx
             // one back, and the record route reads the same rule.
             const std::optional<Rtx::Light> least = makeLight(describe(0, 0x00FFFFFF, 0), osg::Vec3f(), 0.0, 1).value();
             ASSERT_TRUE(least.has_value());
-            EXPECT_FLOAT_EQ(least->mSourceRadius, 1.0f);
-            EXPECT_FLOAT_EQ(makeLight(describe(-50, 0x00FFFFFF, 0), osg::Vec3f(), 0.0, 1).value()->mSourceRadius, 1.0f)
+            EXPECT_FLOAT_EQ(least->mSourceRadius, 0.25f);
+            EXPECT_FLOAT_EQ(makeLight(describe(-50, 0x00FFFFFF, 0), osg::Vec3f(), 0.0, 1).value()->mSourceRadius, 0.25f)
                 << "and so is a record that names less than nothing";
         }
 

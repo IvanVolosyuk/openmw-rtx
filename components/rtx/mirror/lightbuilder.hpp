@@ -55,6 +55,11 @@ namespace Rtx
     Misc::Result<std::optional<Light>, std::string_view> makeLight(
         const osg::Vec3f& colour, float radius, const osg::Vec3f& position);
 
+    /// The graph route, including the same clock-driven flame size and motion as the record
+    /// route. A steady lamp is unchanged; a held lamp's position already follows its attachment.
+    Misc::Result<std::optional<Light>, std::string_view> makeLight(
+        const SceneUtil::LightSource& source, const osg::Vec3f& position, double simulationTime);
+
     /// Whether a light in the game's scene graph makes a lamp that gives light: a radius over nought,
     /// and its recorded colour — the diffuse and the ambient, before any flicker or fade scales them
     /// — over nought in some channel and under it in none. What makes the light's model a lamp body
