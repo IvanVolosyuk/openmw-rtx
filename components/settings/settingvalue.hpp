@@ -46,6 +46,7 @@ namespace Settings
         VSyncMode,
         NormalizedPath,
         Upscale,
+        Upscaler,
         SpecularLayout,
     };
 
@@ -185,6 +186,12 @@ namespace Settings
     }
 
     template <>
+    inline constexpr SettingValueType getSettingValueType<Rtx::UpscalerKind>()
+    {
+        return SettingValueType::Upscaler;
+    }
+
+    template <>
     inline constexpr SettingValueType getSettingValueType<Rtx::SpecularLayout>()
     {
         return SettingValueType::SpecularLayout;
@@ -238,6 +245,8 @@ namespace Settings
                 return "normalized path";
             case SettingValueType::Upscale:
                 return "upscale mode";
+            case SettingValueType::Upscaler:
+                return "upscaler";
             case SettingValueType::SpecularLayout:
                 return "specular map layout";
         }

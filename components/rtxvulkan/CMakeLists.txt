@@ -1,6 +1,8 @@
 # The Vulkan backend: the device, its memory, its acceleration structures and its passes. What is
 # true of the content lives in `components/rtx`, which links no graphics API.
 
+include("${OpenMW_SOURCE_DIR}/cmake/DlssSdk.cmake")
+
 find_program(OPENMW_GLSLC NAMES glslc HINTS "${Vulkan_GLSLC_EXECUTABLE}" REQUIRED
     DOC "glslc, from shaderc — compiles the renderer's GLSL to SPIR-V")
 find_program(OPENMW_SPIRV_VAL NAMES spirv-val REQUIRED
@@ -72,6 +74,7 @@ set(RTX_SHADERS
     shaders/trace/denoise/shadowmask.comp
     shaders/trace/denoise/shadowtiles.comp
     shaders/trace/denoise/specular.comp
+    shaders/upscale/dlssinputs.comp
     shaders/upscale/fsraccumulate.comp
     shaders/upscale/fsrchange.comp
     shaders/upscale/fsrchangepyramid.comp
@@ -256,6 +259,7 @@ set(RTX_VULKAN_FILES
     device/commands.hpp
     device/device.cpp
     device/device.hpp
+    device/dlss.hpp
     device/gputimer.cpp
     device/gputimer.hpp
     device/graveyard.cpp
@@ -394,6 +398,7 @@ set(RTX_VULKAN_FILES
     shaders/shared/channeldigest.h
     shaders/shared/composite.h
     shaders/shared/counts.h
+    shaders/shared/dlss.h
     shaders/shared/exposure.h
     shaders/shared/fields.h
     shaders/shared/fogvolume.h
@@ -506,13 +511,25 @@ set(RTX_VULKAN_FILES
     trace/visibilitypass.hpp
     trace/wavepass.cpp
     trace/wavepass.hpp
+    upscale/dlssupscaler.hpp
     upscale/fsrframe.cpp
     upscale/fsrframe.hpp
+    upscale/fsrupscaler.cpp
+    upscale/fsrupscaler.hpp
+    upscale/upscaleinputs.hpp
     upscale/upscaler.cpp
     upscale/upscaler.hpp
     vulkanrenderer.cpp
     vulkanrenderer.hpp
 )
+
+if (OPENMW_RTX_DLSS)
+    list(APPEND RTX_VULKAN_FILES device/dlss.cpp upscale/dlssupscaler.cpp)
+    add_library(openmw-rtx-dlss STATIC IMPORTED)
+    set_target_properties(openmw-rtx-dlss PROPERTIES IMPORTED_LOCATION "${OPENMW_DLSS_LIBRARY}")
+else ()
+    list(APPEND RTX_VULKAN_FILES device/dlssstub.cpp upscale/dlssupscalerstub.cpp)
+endif ()
 
 add_library(openmw-rtx-vulkan STATIC ${RTX_VULKAN_FILES})
 source_group(TREE "${CMAKE_CURRENT_SOURCE_DIR}" PREFIX "components\\rtxvulkan"
@@ -550,6 +567,17 @@ target_compile_definitions(openmw-rtx-vulkan-api INTERFACE VK_NO_PROTOTYPES VOLK
 # Vulkan is private: a host reaches the backend through `createrenderer.hpp`, which names no Vulkan
 # type. The tests link Vulkan themselves. Windows is where a breach fails; Linux's headers hide it.
 target_link_libraries(openmw-rtx-vulkan PUBLIC components PRIVATE openmw-rtx-spirv openmw-rtx-vulkan-api SDL3::SDL3)
+target_compile_definitions(openmw-rtx-vulkan PRIVATE OPENMW_RTX_DLSS=$<BOOL:${OPENMW_RTX_DLSS}>)
+if (OPENMW_RTX_DLSS)
+    target_include_directories(openmw-rtx-vulkan SYSTEM PRIVATE "${OPENMW_DLSS_INCLUDE_DIR}")
+    target_link_libraries(openmw-rtx-vulkan PRIVATE openmw-rtx-dlss)
+    install(FILES "${OPENMW_DLSS_RUNTIME_FILE}" DESTINATION "${CMAKE_INSTALL_BINDIR}")
+    if (OPENMW_DLSS_LICENSE)
+        install(FILES "${OPENMW_DLSS_LICENSE}" DESTINATION "${CMAKE_INSTALL_DOCDIR}/licenses"
+            RENAME "NVIDIA-RTX-SDK.txt")
+    endif ()
+    set(OPENMW_DLSS_RUNTIME_FILE "${OPENMW_DLSS_RUNTIME_FILE}" CACHE INTERNAL "DLSS runtime beside the game")
+endif ()
 
 add_dependencies(openmw-rtx-vulkan openmw-rtx-vulkan-shaders)
 

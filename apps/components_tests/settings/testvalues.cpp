@@ -99,12 +99,21 @@ namespace Settings
                 Values values(index);
                 EXPECT_EQ(values.mRTX.mSpecularMapLayout.get(), layout) << spelling;
             }
+            for (const auto& [upscaler, spelling] : Rtx::sUpscalerNames.mNames)
+            {
+                Manager::mUserSettings[std::make_pair("RTX", "upscaler")] = std::string(spelling);
+                Index index;
+                Values values(index);
+                EXPECT_EQ(values.mRTX.mUpscaler.get(), upscaler) << spelling;
+            }
 
             {
                 Index index;
                 Values values(index);
                 values.mRTX.mUpscale.set(Rtx::Upscale::UltraPerformance);
                 EXPECT_EQ(Manager::mUserSettings.at({ "RTX", "upscale" }), "ultraperformance");
+                values.mRTX.mUpscaler.set(Rtx::UpscalerKind::Dlss);
+                EXPECT_EQ(Manager::mUserSettings.at({ "RTX", "upscaler" }), "dlss");
             }
 
             Manager::mUserSettings[std::make_pair("RTX", "upscale")] = "Quality";

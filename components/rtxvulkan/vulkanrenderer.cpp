@@ -39,6 +39,7 @@
 #include <components/rtx/world/fogbuilder.hpp>
 #include <components/rtx/world/frameworld.hpp>
 #include <components/rtxvulkan/device/commands.hpp>
+#include <components/rtxvulkan/device/dlss.hpp>
 #include <components/rtxvulkan/device/memory/frameslots.hpp>
 #include <components/rtxvulkan/device/memory/image.hpp>
 #include <components/rtxvulkan/device/memory/imagearena.hpp>
@@ -78,7 +79,8 @@ namespace Rtx
             const VkExtent2D render{ extents.mRenderWidth, extents.mRenderHeight };
             VkDeviceSize bytes = PresentTarget::bytesAt(device, width, height)
                 + DisplayChain::bytesAt(device, width, height)
-                + FrameTracer::bytesAt(device, render, output, profile.mUpscale, profile.mRadianceWidth, declared);
+                + FrameTracer::bytesAt(
+                    device, render, output, profile.mUpscale, profile.mUpscaler, profile.mRadianceWidth, declared);
             if (pictures.width > 0)
                 bytes += PictureTracer::bytesAt(device, pictures, profile.mRadianceWidth);
 
@@ -101,6 +103,17 @@ namespace Rtx
             return Surface::getInstanceExtensions();
         }
 
+        /// What NGX needs on the instance, asked before the instance exists: its discovery call
+        /// says "before `vkCreateInstance`", and a missing extension would otherwise turn into a
+        /// feature that cannot be created after the device is already made.
+        std::vector<std::string> dlssInstanceExtensionsFor(const RendererOptions& options)
+        {
+            if (!Dlss::sCompiled || options.mRun.mProfile.mUpscaler == UpscalerKind::Fsr)
+                return {};
+
+            return Dlss::requiredInstanceExtensions();
+        }
+
         /// Whether a queue family presents to `surface`, or nothing to ask for no window.
         PhysicalDevice::PresentQuery presentsTo(const Surface* surface)
         {
@@ -113,14 +126,15 @@ namespace Rtx
     }
 
     VulkanRenderer::VulkanRenderer(const RendererOptions& options)
-        : mInstance(options.mRun.mValidation, surfaceExtensionsFor(options))
+        : mInstance(options.mRun.mValidation, surfaceExtensionsFor(options), dlssInstanceExtensionsFor(options))
         , mSurface(options.mWindow != nullptr ? std::make_unique<Surface>(mInstance, options.mWindow) : nullptr)
         , mDevice(mInstance, PhysicalDevice::select(mInstance.getHandle(), presentsTo(mSurface.get())),
               options.mShaders, PipelineCacheSpec{ .mDirectory = options.mCacheDirectory },
               DeviceReport{ .mStatistics
                   = options.mPipelineStatistics ? PipelineStatistics::Captured : PipelineStatistics::Skipped,
                   .mCodeFolder = options.mRun.mPipelineCode,
-                  .mCounters = options.mRun.mZoneCounters })
+                  .mCounters = options.mRun.mZoneCounters,
+                  .mDlss = options.mRun.mProfile.mUpscaler != UpscalerKind::Fsr })
         , mCounting(options.mCounting)
         , mProfile(options.mRun.mProfile)
         , mInverseGamma(1.0f / mProfile.mGamma)
@@ -131,13 +145,17 @@ namespace Rtx
         , mScenePasses(mDevice)
         , mArrival(mDevice)
         , mTracePasses(mDevice, mScenePasses.mTextureLayout, mCounting, mProfile.mSpecializeKernels)
-        , mFrame(mDevice, mTracePasses, mProfile.mRadianceWidth)
+        , mFrame(mDevice, mTracePasses, mProfile.mRadianceWidth, mProfile.mUpscaler)
         , mDisplay(mDevice, mTracePasses.mVisibility, mScenePasses.mTextureLayout)
         , mMedia(mDevice, FogNoise::shared())
         , mGui(mDevice)
         , mPictures(mDevice, mTracePasses, mProfile.mRadianceWidth)
     {
         mDevice.getMemory().limitBudget(options.mRun.mMemoryBudget);
+
+        // **What `Auto` came to**, before any target is declared: the shared images and the
+        // upscaler's own are one list, and a frame cannot ask the resolution twice.
+        mProfile.mUpscaler = mFrame.getUpscaler().getKind();
 
         if (options.mWindow != nullptr)
             mPresenter = std::make_unique<Presenter>(mDevice, *mSurface, options.mWindow, options.mVerticalSync);
@@ -202,7 +220,8 @@ namespace Rtx
         // and room kept for them was room an 8 GB card's textures stood smaller for at a 4K output.
         std::vector<ArenaImage> declared;
         FrameTracer::declare(render, output, mProfile, declared);
-        const FrameTracer::Moves moves = mFrame.movesTo(render, output, mProfile.mUpscale, declared);
+        const FrameTracer::Moves moves
+            = mFrame.movesTo(render, output, mProfile.mUpscale, mProfile.mUpscaler, declared);
         const VkDeviceSize reserve = frameAt(mDevice, width, height, mPictureRoom, mProfile, declared);
 
         // **The world is built again where the reserve moving changes what it would stand as**, by the
@@ -248,7 +267,7 @@ namespace Rtx
         }
 
         // **Placed again only where the arena moved**, which the device was drained for.
-        mFrame.resize(render, output, mProfile.mUpscale, std::move(declared));
+        mFrame.resize(render, output, mProfile.mUpscale, mProfile.mUpscaler, std::move(declared));
 
         mTarget.resize(mDevice, width, height);
 
@@ -274,7 +293,7 @@ namespace Rtx
         report += mDevice.getPhysicalDevice().describe();
         report += mInstance.getLayers().describe();
 
-        report += "\nupscaler:          " + std::string(Upscaler::describe()) + '\n';
+        report += "\nupscaler:          " + std::string(mFrame.getUpscaler().describe()) + '\n';
 
         // Reaching here is the part that proves the rest: the device resolved every entry point the
         // required extensions promise, and a driver advertising one it cannot dispatch fails before
@@ -799,7 +818,7 @@ namespace Rtx
             if (!reconstruction.upscaled())
                 return traced.mColour;
 
-            return upscaler.record(commands,
+            return upscaler.record(mProfile.mUpscaler, commands,
                 UpscaleInputs{
                     .mColour = traced.mColour.mImage,
                     .mSurface = channels.get(Channel::Surface),
