@@ -384,6 +384,8 @@ namespace RtxTool
             "one sheet: what a frame there would actually sample, since a town's people wear "
             "textures the town itself never names");
 
+        option(sFramed, "upscaler", bpo::value<std::string>()->default_value("fsr"),
+            "reconstruction backend: fsr, dlss or auto. FSR by default for repeatable measurements");
         option(otherThan(Verbs::Info | Verbs::Film), "upscale",
             bpo::value<std::string>()->default_value(
                 std::string(Rtx::sUpscaleNames.name(byDefault.mSetup.mRun.mProfile.mUpscale))),
@@ -906,6 +908,7 @@ namespace RtxTool
         else if (verb != Verbs::View)
             frame.mMaps = MapRules::Shipped;
         frame.mUpscale = { Rtx::sUpscaleNames.require(text("upscale"), "an upscale mode"), named("upscale") };
+        frame.mUpscaler = Rtx::sUpscalerNames.require(text("upscaler"), "an upscaler");
         if (named("grass"))
             frame.mGrass = on("grass");
         if (named("distant-cells"))

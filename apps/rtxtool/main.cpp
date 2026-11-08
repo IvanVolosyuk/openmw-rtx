@@ -248,6 +248,7 @@ namespace RtxTool
             profile.mStressOverlapMs = line.mHold.mValue ? sCheckHoldMs : 0.0;
             profile.mSpecializeKernels = line.mVariants;
             profile.mReconstruction = line.mReconstruction;
+            profile.mUpscaler = line.mUpscaler;
             profile.mReconstruction.mSampling.mIndirect = derived.mIndirectLighting;
             profile.mReconstruction.mSampling.mBounceRays = derived.mBounceRays;
 

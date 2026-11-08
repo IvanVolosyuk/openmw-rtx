@@ -255,13 +255,12 @@ namespace Rtx
         create.Feature.InTargetHeight = output.height;
         create.Feature.InPerfQualityValue = qualityOf(render, output);
 
-        // **HDR, low-resolution motion, jittered motion and reversed depth**: the renderer's frame
-        // is linear radiance, its motion is resolved at the render extent and already includes the
-        // trace's jitter, and its depth is `near / view depth` with the near plane at one. Exposure
-        // is DLSS's own meter, because the renderer's meter runs after the upscaler.
+        // Motion projects the surface at both ends without jitter: a stationary surface has zero
+        // motion even as rayAt samples a different subpixel. Marking it jittered makes NGX subtract
+        // a jitter delta that is not there. Depth is reversed and colour is linear HDR; exposure is
+        // DLSS's own meter, because the renderer's meter runs after the upscaler.
         create.InFeatureCreateFlags = NVSDK_NGX_DLSS_Feature_Flags_IsHDR | NVSDK_NGX_DLSS_Feature_Flags_MVLowRes
-            | NVSDK_NGX_DLSS_Feature_Flags_MVJittered | NVSDK_NGX_DLSS_Feature_Flags_DepthInverted
-            | NVSDK_NGX_DLSS_Feature_Flags_AutoExposure;
+            | NVSDK_NGX_DLSS_Feature_Flags_DepthInverted | NVSDK_NGX_DLSS_Feature_Flags_AutoExposure;
         create.InEnableOutputSubrects = false;
 
         NVSDK_NGX_Result result = NVSDK_NGX_Result_Fail;
@@ -348,8 +347,10 @@ namespace Rtx
         evaluation.Feature.pInOutput = &output;
         evaluation.pInDepth = &depth;
         evaluation.pInMotionVectors = &motion;
-        evaluation.InJitterOffsetX = inputs.mEyes.mWorld.mJitter.x();
-        evaluation.InJitterOffsetY = inputs.mEyes.mWorld.mJitter.y();
+        // rayAt offsets the sample, whereas NGX names the resulting image displacement, which is
+        // opposite. FsrFrame uses the same conversion for the same ray samples.
+        evaluation.InJitterOffsetX = -inputs.mEyes.mWorld.mJitter.x();
+        evaluation.InJitterOffsetY = -inputs.mEyes.mWorld.mJitter.y();
         evaluation.InRenderSubrectDimensions
             = NVSDK_NGX_Dimensions{ .Width = targets.mRender.width, .Height = targets.mRender.height };
         evaluation.InReset = reset ? 1 : 0;
