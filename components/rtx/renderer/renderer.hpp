@@ -521,6 +521,7 @@ namespace Rtx
 
         /// Selects the existing outlier-suppression pass for subsequent frames, without rebuilding targets.
         virtual void setAntiFirefly(bool enabled) = 0;
+        virtual void setIndirectLimit(float multiple) = 0;
 
         /// How many of `set`'s kernels are made, waiting `patience` at most for the rest, and
         /// rethrowing what making one threw. The renderer starts making them as it is made, on

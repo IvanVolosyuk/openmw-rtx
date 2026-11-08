@@ -534,6 +534,12 @@ namespace Rtx
         mProfile.mReconstruction.mSampling.mIndirect = traced;
     }
 
+    void VulkanRenderer::setIndirectLimit(const float multiple)
+    {
+        assert(multiple >= 0.0f && std::isfinite(multiple));
+        mProfile.mReconstruction.mSampling.mIndirectLimit = multiple;
+    }
+
     void VulkanRenderer::setAntiFirefly(const bool enabled)
     {
         mProfile.mReconstruction.mFilters.mAntiFirefly = enabled;
@@ -756,6 +762,15 @@ namespace Rtx
         GpuTimer& timer = frame.mTimer;
         Recording trace = mRing.recordWorld(frame);
         const VkCommandBuffer commands = trace.get();
+
+        if (sampled.mIndirectLimit > 0.0f)
+        {
+            const ExposureRule exposure = options.mExposure.value_or(mProfile.mExposure);
+            if (const auto* fixed = std::get_if<FixedExposure>(&exposure))
+                sampled.mIndirectLimit /= fixed->mScale;
+            else
+                sampled.mIndirectExposure = mDisplay.indirectExposure(commands);
+        }
 
         // The glare fader's query starts the frame at nothing, ahead of the trace that counts.
         mDisplay.beginGlare(commands);

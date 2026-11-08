@@ -70,6 +70,7 @@ namespace Rtx
         void setIndirectLighting(bool traced) override;
         void setBounceRays(std::uint32_t rays) override;
         void setAntiFirefly(bool enabled) override;
+        void setIndirectLimit(float multiple) override;
         JobProgress awaitKernels(KernelSet, std::chrono::milliseconds) override { return {}; }
         FrameTraced renderFrame(const FrameRequest& request) override;
         void holdAir(const AirClock&) override {}

@@ -53,6 +53,7 @@ namespace MWGui
         MyGUI::ComboBox* mRayTracingSpecularMaps;
         MyGUI::ScrollBar* mRayTracingBounceRays;
         MyGUI::Widget* mRayTracingAntiFirefly;
+        MyGUI::ScrollBar* mRayTracingIndirectLimit;
 
         // controls
         MyGUI::ScrollView* mControlsBox;

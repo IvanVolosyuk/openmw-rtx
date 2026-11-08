@@ -100,6 +100,7 @@ namespace MWRender
             { "RTX", "anti firefly", {} },
             { "RTX", "bounce rays", {} },
             { "RTX", "distant land cells", {} },
+            { "RTX", "indirect brightness limit", {} },
             { "RTX", "indirect lighting", {} },
             { "RTX", "lamp animation speed", {} },
             { "RTX", "lamp flicker strength", {} },

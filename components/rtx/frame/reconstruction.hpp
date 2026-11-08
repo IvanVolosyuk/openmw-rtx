@@ -65,6 +65,9 @@ namespace Rtx
         /// a picture's, whose `Reconstruction{}` takes the default.
         std::uint32_t mBounceRays = 1;
 
+        /// Maximum per-ray indirect luminance in multiples of exposed reference white; zero disables.
+        float mIndirectLimit = 0.0f;
+
         bool operator==(const SamplingSwitches& other) const = default;
     };
 

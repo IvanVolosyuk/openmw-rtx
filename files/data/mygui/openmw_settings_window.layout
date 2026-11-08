@@ -456,18 +456,36 @@
                                 </Widget>
                             </Widget>
 
-                            <Widget type="TextBox" skin="NormalText" position="0 216 420 18" align="Left Top" name="RayTracingSpecularMapsText">
+                            <Widget type="TextBox" skin="NormalText" position="0 212 420 18" name="RayTracingIndirectLimitText"/>
+                            <Widget type="ScrollBar" skin="MW_HScroll" position="0 233 420 18" name="RayTracingIndirectLimitSlider">
+                                <Property key="Range" value="257"/>
+                                <Property key="Page" value="1"/>
+                                <Property key="WheelPage" value="1"/>
+                                <UserString key="SettingType" value="Slider"/>
+                                <UserString key="SettingCategory" value="RTX"/>
+                                <UserString key="SettingName" value="indirect brightness limit"/>
+                                <UserString key="SettingValueType" value="Float"/>
+                                <UserString key="SettingMin" value="0"/>
+                                <UserString key="SettingMax" value="64"/>
+                                <UserString key="SettingLabelWidget" value="RayTracingIndirectLimitText"/>
+                                <UserString key="SettingLabelCaption" value="RayTracingIndirectLimitValue"/>
+                                <UserString key="ToolTipType" value="Layout"/>
+                                <UserString key="ToolTipLayout" value="TextToolTip"/>
+                                <UserString key="Caption_Text" value="#{OMWEngine:RayTracingIndirectLimitHint}"/>
+                            </Widget>
+
+                            <Widget type="TextBox" skin="NormalText" position="0 264 420 18" align="Left Top" name="RayTracingSpecularMapsText">
                                 <Property key="Caption" value="#{OMWEngine:RayTracingSpecularMaps}"/>
                             </Widget>
-                            <Widget type="ComboBox" skin="MW_ComboBox" position="0 236 420 24" align="Left Top" name="RayTracingSpecularMapsList"/>
-                            <Widget type="TextBox" skin="SandText" position="0 262 420 18" align="Left Top" name="RayTracingSpecularMapsHint">
+                            <Widget type="ComboBox" skin="MW_ComboBox" position="0 284 420 24" align="Left Top" name="RayTracingSpecularMapsList"/>
+                            <Widget type="TextBox" skin="SandText" position="0 310 420 18" align="Left Top" name="RayTracingSpecularMapsHint">
                                 <Property key="Caption" value="#{OMWEngine:RayTracingSpecularMapsHint}"/>
                             </Widget>
 
-                            <Widget type="TextBox" skin="NormalText" position="0 286 420 18" align="Left Top" name="RayTracingDistantLandText">
+                            <Widget type="TextBox" skin="NormalText" position="0 334 420 18" align="Left Top" name="RayTracingDistantLandText">
                                 <Property key="Caption" value="#{OMWEngine:RayTracingDistantLand}"/>
                             </Widget>
-                            <Widget type="ScrollBar" skin="MW_HScroll" position="0 308 420 18" align="Left Top" name="RayTracingDistantLandSlider">
+                            <Widget type="ScrollBar" skin="MW_HScroll" position="0 356 420 18" align="Left Top" name="RayTracingDistantLandSlider">
                                 <Property key="Page" value="1"/>
                                 <Property key="WheelPage" value="1"/>
                                 <UserString key="SettingType" value="Slider"/>
@@ -478,18 +496,18 @@
                                 <UserString key="SettingLabelCaption" value="RayTracingDistantLandValue"/>
                             </Widget>
 
-                            <Widget type="TextBox" skin="NormalText" position="0 332 420 18" align="Left Top">
+                            <Widget type="TextBox" skin="NormalText" position="0 380 420 18" align="Left Top">
                                 <Property key="Caption" value="#{OMWEngine:Anisotropy}"/>
                             </Widget>
-                            <Widget type="ComboBox" skin="MW_ComboBox" position="0 352 420 24" align="Left Top" name="Anisotropy">
+                            <Widget type="ComboBox" skin="MW_ComboBox" position="0 400 420 24" align="Left Top" name="Anisotropy">
                                 <Property key="AddItem" value="#{Interface:Off}"/>
                                 <Property key="AddItem" value="2x"/>
                                 <Property key="AddItem" value="4x"/>
                                 <Property key="AddItem" value="8x"/>
                                 <Property key="AddItem" value="16x"/>
                             </Widget>
-                            <Widget type="TextBox" skin="NormalText" position="0 386 420 18" name="LampSourceSizeText"/>
-                            <Widget type="ScrollBar" skin="MW_HScroll" position="0 407 420 18" name="LampSourceSizeSlider">
+                            <Widget type="TextBox" skin="NormalText" position="0 434 420 18" name="LampSourceSizeText"/>
+                            <Widget type="ScrollBar" skin="MW_HScroll" position="0 455 420 18" name="LampSourceSizeSlider">
                                 <Property key="Range" value="100"/>
                                 <Property key="Page" value="1"/>
                                 <Property key="WheelPage" value="5"/>
@@ -502,8 +520,8 @@
                                 <UserString key="SettingLabelWidget" value="LampSourceSizeText"/>
                                 <UserString key="SettingLabelCaption" value="LampSourceSizeValue"/>
                             </Widget>
-                            <Widget type="TextBox" skin="NormalText" position="0 434 420 18" name="LampFlickerText"/>
-                            <Widget type="ScrollBar" skin="MW_HScroll" position="0 455 420 18" name="LampFlickerSlider">
+                            <Widget type="TextBox" skin="NormalText" position="0 482 420 18" name="LampFlickerText"/>
+                            <Widget type="ScrollBar" skin="MW_HScroll" position="0 503 420 18" name="LampFlickerSlider">
                                 <Property key="Range" value="301"/>
                                 <Property key="Page" value="1"/>
                                 <Property key="WheelPage" value="5"/>
@@ -516,8 +534,8 @@
                                 <UserString key="SettingLabelWidget" value="LampFlickerText"/>
                                 <UserString key="SettingLabelCaption" value="LampFlickerValue"/>
                             </Widget>
-                            <Widget type="TextBox" skin="NormalText" position="0 482 420 18" name="LampSpeedText"/>
-                            <Widget type="ScrollBar" skin="MW_HScroll" position="0 503 420 18" name="LampSpeedSlider">
+                            <Widget type="TextBox" skin="NormalText" position="0 530 420 18" name="LampSpeedText"/>
+                            <Widget type="ScrollBar" skin="MW_HScroll" position="0 551 420 18" name="LampSpeedSlider">
                                 <Property key="Range" value="391"/>
                                 <Property key="Page" value="1"/>
                                 <Property key="WheelPage" value="5"/>
@@ -530,8 +548,8 @@
                                 <UserString key="SettingLabelWidget" value="LampSpeedText"/>
                                 <UserString key="SettingLabelCaption" value="LampSpeedValue"/>
                             </Widget>
-                            <Widget type="TextBox" skin="NormalText" position="0 530 420 18" name="LampMovementText"/>
-                            <Widget type="ScrollBar" skin="MW_HScroll" position="0 551 420 18" name="LampMovementSlider">
+                            <Widget type="TextBox" skin="NormalText" position="0 578 420 18" name="LampMovementText"/>
+                            <Widget type="ScrollBar" skin="MW_HScroll" position="0 599 420 18" name="LampMovementSlider">
                                 <Property key="Range" value="2001"/>
                                 <Property key="Page" value="1"/>
                                 <Property key="WheelPage" value="5"/>
@@ -544,8 +562,8 @@
                                 <UserString key="SettingLabelWidget" value="LampMovementText"/>
                                 <UserString key="SettingLabelCaption" value="LampMovementValue"/>
                             </Widget>
-                            <Widget type="TextBox" skin="NormalText" position="0 578 420 18" name="LampBreathingText"/>
-                            <Widget type="ScrollBar" skin="MW_HScroll" position="0 599 420 18" name="LampBreathingSlider">
+                            <Widget type="TextBox" skin="NormalText" position="0 626 420 18" name="LampBreathingText"/>
+                            <Widget type="ScrollBar" skin="MW_HScroll" position="0 647 420 18" name="LampBreathingSlider">
                                 <Property key="Range" value="91"/>
                                 <Property key="Page" value="1"/>
                                 <Property key="WheelPage" value="5"/>
@@ -558,7 +576,7 @@
                                 <UserString key="SettingLabelWidget" value="LampBreathingText"/>
                                 <UserString key="SettingLabelCaption" value="LampBreathingValue"/>
                             </Widget>
-                            <Widget type="TextBox" skin="SandText" position="0 630 420 42" name="LampAnimationHint">
+                            <Widget type="TextBox" skin="SandText" position="0 678 420 42" name="LampAnimationHint">
                                 <Property key="Caption" value="#{OMWEngine:LampAnimationHint}"/>
                                 <Property key="WordWrap" value="true"/>
                             </Widget>

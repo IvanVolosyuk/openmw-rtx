@@ -23,6 +23,7 @@ namespace MWRender
             .mUpscaler = Settings::rtx().mUpscaler.get(),
             .mIndirectLighting = Settings::rtx().mIndirectLighting,
             .mAntiFirefly = Settings::rtx().mAntiFirefly,
+            .mIndirectLimit = Settings::rtx().mIndirectLimit,
             .mBounceRays = Settings::rtx().mBounceRays,
             .mLamps = {
                 .mSourceScale = Settings::rtx().mLampSourceSize.get() / 25.0f,
@@ -58,11 +59,15 @@ namespace MWRender
             throw Rtx::InputError(
                 std::format("{} bounce rays is outside one to {}", values.mBounceRays, Rtx::Shaders::MAX_BOUNCE_RAYS));
 
+        if (!(values.mIndirectLimit >= 0.0f && values.mIndirectLimit <= 64.0f))
+            throw Rtx::InputError("indirect brightness limit must be finite and between zero and 64");
+
         return RtxSettings{
             .mUpscale = values.mUpscale,
             .mUpscaler = values.mUpscaler,
             .mIndirectLighting = values.mIndirectLighting,
             .mAntiFirefly = values.mAntiFirefly,
+            .mIndirectLimit = values.mIndirectLimit,
             .mBounceRays = static_cast<std::uint32_t>(values.mBounceRays),
             .mMirror = {
                 .mReach = { .mCells = values.mDistantLandCells, .mViewingDistance = values.mViewingDistance },

@@ -115,6 +115,7 @@ namespace RtxTool
                 { "shadow-floor", "0.25" },
                 { "lamp-candidates", "0" },
                 { "indirect", "false" },
+                { "indirect-limit", "4" },
                 { "bounce-rays", "16" },
                 { "antilag", "false" },
                 { "history-fix", "false" },

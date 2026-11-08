@@ -22,6 +22,7 @@ namespace MWRender
         Rtx::UpscalerKind mUpscaler = Rtx::UpscalerKind::Auto;
         bool mIndirectLighting = true;
         bool mAntiFirefly = false;
+        float mIndirectLimit = 0.0f;
         int mBounceRays = 1;
         Rtx::LampSettings mLamps;
         float mDistantLandCells = 0.0f;
@@ -54,6 +55,7 @@ namespace MWRender
         /// `SamplingSwitches::mIndirect`: the setting.
         bool mIndirectLighting = true;
         bool mAntiFirefly = false;
+        float mIndirectLimit = 0.0f;
 
         /// `SamplingSwitches::mBounceRays`: the setting, from one to `Shaders::MAX_BOUNCE_RAYS`.
         std::uint32_t mBounceRays = 1;

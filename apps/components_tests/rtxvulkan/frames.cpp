@@ -216,19 +216,23 @@ namespace Rtx
                 return *frame;
             };
 
+            mRenderer.setIndirectLimit(4.0f);
             mRenderer.setAntiFirefly(true);
             mRenderer.setBounceRays(16);
             const FrameResult most = traced();
             mRenderer.setIndirectLighting(false);
             const FrameResult off = traced();
             mRenderer.setIndirectLighting(true);
+            mRenderer.setIndirectLimit(0.0f);
             mRenderer.setAntiFirefly(false);
             mRenderer.setBounceRays(1);
             const FrameResult one = traced();
 
             EXPECT_EQ(most.mReconstruction.mSampling.mBounceRays, 16u);
+            EXPECT_EQ(most.mReconstruction.mSampling.mIndirectLimit, 4.0f);
             EXPECT_TRUE(most.mReconstruction.mFilters.mAntiFirefly);
             EXPECT_TRUE(off.mReconstruction.mFilters.mAntiFirefly);
+            EXPECT_EQ(one.mReconstruction.mSampling.mIndirectLimit, 0.0f);
             EXPECT_FALSE(one.mReconstruction.mFilters.mAntiFirefly);
             EXPECT_FALSE(off.mReconstruction.mSampling.mIndirect);
             EXPECT_EQ(off.mReconstruction.mSampling.mBounceRays, 16u);
