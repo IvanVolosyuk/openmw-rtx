@@ -72,8 +72,9 @@ Requirements
 * Vulkan 1.4 with ray tracing pipelines, ray queries and position fetch. On a machine without them
   the game does not start, and its error box says what is missing and where the log is. No other
   renderer takes its place.
-* An NVIDIA card with DLSS support may use DLSS Super Resolution instead of FSR; the build fetches
-  NVIDIA's SDK at configure time. `[RTX] upscaler = auto | fsr | dlss` chooses.
+* An NVIDIA card with DLSS support may use DLSS Super Resolution or DLSS Ray Reconstruction instead
+  of FSR; the build fetches NVIDIA's SDK at configure time. `[RTX] upscaler = auto | fsr | dlss | dlss-rr`
+  chooses.
 
 Measured so far on a high-end NVIDIA laptop GPU, an AMD handheld under RADV, and a low-end AMD
 integrated GPU under AMD's Windows driver. On a slow GPU, `[RTX] indirect lighting` off saves the

@@ -19,7 +19,8 @@ stays built so upstream's code merges as it stands. Its code is upstream's but f
 
 The target is NVIDIA RTX, Turing and later, and AMD RDNA 2 and later, through Vulkan's ray tracing.
 The denoiser is the renderer's own, and the upscaler is AMD's FSR 3.1.4 ported to compute shaders,
-or NVIDIA DLSS through NGX where the build has the DLSS SDK and the card accepts it: at `native`
+or NVIDIA DLSS Super Resolution or Ray Reconstruction through NGX where the build has the DLSS SDK
+and the card accepts it: at `native`
 the upscaler is the anti-aliasing, and every other mode traces fewer pixels than the frame holds.
 Vanilla textures are pre-lit, so the renderer estimates the painted light and divides it
 out; a PBR replacer's companion maps reach the trace, and a vanilla scene draws the same whether or

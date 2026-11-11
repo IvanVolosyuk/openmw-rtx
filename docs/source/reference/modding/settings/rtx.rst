@@ -47,20 +47,21 @@ runs.
 .. omw-setting::
    :title: upscaler
    :type: string
-   :range: auto, fsr, dlss
+   :range: auto, fsr, dlss, dlss-rr
    :default: auto
 
-   Which upscaler does the work above. :code:`auto` uses NVIDIA DLSS where this build has the DLSS
-   SDK, the card is an NVIDIA RTX, and the installed driver accepts it; FSR 3.1 everywhere else.
+   Which upscaler does the work above. :code:`auto` uses NVIDIA DLSS Super Resolution where this
+   build has the DLSS SDK, the card is an NVIDIA RTX, and the installed driver accepts it; FSR 3.1
+   everywhere else. :code:`dlss-rr` explicitly selects NVIDIA DLSS Ray Reconstruction, which
+   replaces the renderer's own denoisers and upscaler whenever :code:`upscale` is not :code:`off`.
    :code:`fsr` never looks for DLSS, which is what an AMD card or an A/B against FSR wants.
-   :code:`dlss` refuses to start where DLSS cannot, naming the reason, rather than quietly drawing
-   through FSR. A build made without the SDK has only :code:`fsr`.
+   :code:`dlss` and :code:`dlss-rr` refuse to start where NGX cannot run them, naming the reason,
+   rather than quietly drawing through FSR. A build made without the SDK has only :code:`fsr`.
 
-   DLSS is the current SDK's model and preset, so NVIDIA's over-the-air updates reach a build that
-   predates them: quality, balanced and native use the transformer preset K, performance preset M,
-   and ultra performance preset L, which is DLSS 4.5 Super Resolution. Read once, where the renderer
-   is made: the launcher and the settings window offer all three, and the settings window says a
-   change needs a restart.
+   DLSS and DLSS Ray Reconstruction use the current SDK's default model and preset, so NVIDIA's
+   over-the-air updates reach a build that predates them. Read once, where the renderer is made: the
+   launcher and the settings window offer all four, and the settings window says a change needs a
+   restart.
 
 .. omw-setting::
    :title: indirect lighting

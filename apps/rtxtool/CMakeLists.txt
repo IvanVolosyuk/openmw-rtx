@@ -150,10 +150,10 @@ if (BUILD_OPENMW)
 
     target_link_libraries(openmw-rtxtool openmw-rtxtool-lib openmw-lib)
 
-    if (OPENMW_RTX_DLSS AND OPENMW_DLSS_RUNTIME_FILE)
+    if (OPENMW_RTX_DLSS AND OPENMW_DLSS_RUNTIME_FILE AND OPENMW_DLSSD_RUNTIME_FILE)
         add_custom_command(TARGET openmw-rtxtool POST_BUILD
-            COMMAND ${CMAKE_COMMAND} -E copy_if_different "${OPENMW_DLSS_RUNTIME_FILE}"
-                "$<TARGET_FILE_DIR:openmw-rtxtool>")
+            COMMAND ${CMAKE_COMMAND} -E copy_if_different
+                "${OPENMW_DLSS_RUNTIME_FILE}" "${OPENMW_DLSSD_RUNTIME_FILE}" "$<TARGET_FILE_DIR:openmw-rtxtool>")
     endif ()
 
     # Beside the bundle and not in it: on macOS every program is built into the bundle, which is

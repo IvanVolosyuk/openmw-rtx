@@ -29,8 +29,26 @@ namespace Rtx
         /// equivalent and ignores it.
         const Image& mMasks;
 
+        /// `CHANNEL_ALBEDO`: the diffuse albedo of each pixel's primary surface, read by DLSS Ray
+        /// Reconstruction.
+        const Image& mAlbedo;
+
+        /// `CHANNEL_SPECULAR`: the specular lobe's perceptual roughness in `a` (`SPECULAR_NO_LOBE`
+        /// where no lobe exists), read by DLSS Ray Reconstruction when `mLobed` holds.
+        const Image& mSpecular;
+
+        /// `CHANNEL_SPECULAR_ALBEDO`: the preintegrated directional specular albedo (`gloss.mAlbedo`),
+        /// read by DLSS Ray Reconstruction when `mLobed` holds.
+        const Image& mSpecularAlbedo;
+
         /// The two eyes the trace sampled through, jitter and all.
         Shaders::Eyes mEyes;
+
+        /// `VisibilityConstants::mOrigin`: the world-space camera origin for `WorldToViewMatrix`.
+        Shaders::vec3 mOrigin;
+
+        /// `VisibilityConstants::mFar`: the camera far plane for `ViewToClipMatrix` and sky depth.
+        float mFar = 200000.0f;
 
         /// Where inside its pixel the previous frame sampled: `VisibilityConstants::mPreviousJitter`.
         Shaders::vec2 mPreviousJitter;
@@ -43,6 +61,9 @@ namespace Rtx
 
         /// How long since the previous frame, in seconds, or nought where there was none.
         float mSeconds = 0.0f;
+
+        /// Whether the scene carries specular lobes (`TraceSubject::mMapped`).
+        bool mLobed = false;
 
         /// The frame in flight this reconstruction is recorded into, whose constants it writes.
         FrameSlot mSlot;

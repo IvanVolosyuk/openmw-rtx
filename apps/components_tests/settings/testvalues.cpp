@@ -114,6 +114,8 @@ namespace Settings
                 EXPECT_EQ(Manager::mUserSettings.at({ "RTX", "upscale" }), "ultraperformance");
                 values.mRTX.mUpscaler.set(Rtx::UpscalerKind::Dlss);
                 EXPECT_EQ(Manager::mUserSettings.at({ "RTX", "upscaler" }), "dlss");
+                values.mRTX.mUpscaler.set(Rtx::UpscalerKind::DlssRr);
+                EXPECT_EQ(Manager::mUserSettings.at({ "RTX", "upscaler" }), "dlss-rr");
             }
 
             Manager::mUserSettings[std::make_pair("RTX", "upscale")] = "Quality";

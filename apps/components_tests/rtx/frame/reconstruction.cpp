@@ -70,6 +70,41 @@ namespace Rtx
             EXPECT_TRUE(unfiltered.mJitter);
         }
 
+        /// **DLSS Ray Reconstruction replaces the built-in denoisers wherever an upscaler runs, and
+        /// leaves them standing when upscaling is off.** Super Resolution and FSR still take a
+        /// denoised frame.
+        TEST(RtxReconstructionTest, rayReconstructionReplacesTheDenoisersOnlyWhenUpscaling)
+        {
+            for (const Upscale mode : { Upscale::Native, Upscale::Quality, Upscale::Balanced, Upscale::Performance,
+                     Upscale::UltraPerformance })
+            {
+                const FrameExtents extents = extentsFor(1920, 1080, mode);
+                const Reconstruction rr = Reconstruction::resolve(
+                    mode, ReconstructionRequest{ .mDenoise = true, .mJitter = false }, extents, UpscalerKind::DlssRr);
+                EXPECT_FALSE(rr.mDenoised) << sUpscaleNames.name(mode);
+                EXPECT_TRUE(rr.mJitter) << sUpscaleNames.name(mode);
+
+                const Reconstruction sr = Reconstruction::resolve(
+                    mode, ReconstructionRequest{ .mDenoise = true, .mJitter = false }, extents, UpscalerKind::Dlss);
+                EXPECT_TRUE(sr.mDenoised) << sUpscaleNames.name(mode);
+            }
+
+            const Reconstruction offFiltered = Reconstruction::resolve(
+                Upscale::Off, ReconstructionRequest{ .mDenoise = true }, sUnscaled, UpscalerKind::DlssRr);
+            EXPECT_TRUE(offFiltered.mDenoised) << "nothing upscaling keeps the built-in denoisers";
+
+            const Reconstruction offRaw = Reconstruction::resolve(
+                Upscale::Off, ReconstructionRequest{ .mDenoise = false }, sUnscaled, UpscalerKind::DlssRr);
+            EXPECT_FALSE(offRaw.mDenoised);
+
+            RenderProfile profile;
+            profile.mUpscale = Upscale::Quality;
+            profile.mUpscaler = UpscalerKind::DlssRr;
+            EXPECT_FALSE(profile.reconstructionFor(std::nullopt, sHalved).mDenoised);
+            profile.mUpscale = Upscale::Off;
+            EXPECT_TRUE(profile.reconstructionFor(std::nullopt, sUnscaled).mDenoised);
+        }
+
         /// What the upscaler carries with it: how far every texture level moves for the pixel that
         /// is shown rather than the one traced. The noise stays the tile whatever reconstructs.
         TEST(RtxReconstructionTest, theUpscalerDecidesTheLevelBiasAndARunTheNoiseSource)

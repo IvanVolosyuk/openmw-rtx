@@ -195,17 +195,19 @@ namespace Rtx
         /// Whether an upscaler reconstructed the frame.
         bool upscaled() const { return upscales(mUpscale); }
 
-        /// The whole of the rule, and the only copy of it. An upscaler reconstructs the frame the
-        /// trace chain composed, so the wavelet runs under one as it runs without.
+        /// The whole of the rule, and the only copy of it. FSR and DLSS Super Resolution
+        /// reconstruct the frame the trace chain composed, so the wavelet runs under them as it
+        /// runs without; DLSS Ray Reconstruction denoises and upscales from the unfiltered composite
+        /// and surface guides itself, so the renderer's denoisers step aside whenever it runs.
         ///
         /// @param extents what the frame is traced at and shown at, read only under an upscaler
         ///        and only for its widths, since the pixels are square.
-        static Reconstruction resolve(
-            const Upscale upscale, const ReconstructionRequest& asked, const FrameExtents& extents)
+        static Reconstruction resolve(const Upscale upscale, const ReconstructionRequest& asked,
+            const FrameExtents& extents, const UpscalerKind upscaler = UpscalerKind::Fsr)
         {
             const bool upscaled = upscales(upscale);
             return Reconstruction{
-                .mDenoised = asked.mDenoise,
+                .mDenoised = !(upscaled && upscaler == UpscalerKind::DlssRr) && asked.mDenoise,
                 .mUpscale = upscale,
                 .mJitter = upscaled || asked.mJitter,
                 .mJitterPhases = upscaled ? jitterPhasesFor(extents.mRenderWidth, extents.mOutputWidth) : 0u,
@@ -376,7 +378,7 @@ namespace Rtx
         Reconstruction reconstructionFor(
             const std::optional<ReconstructionRequest>& asked, const FrameExtents& extents) const
         {
-            return Reconstruction::resolve(mUpscale, asked.value_or(mReconstruction), extents);
+            return Reconstruction::resolve(mUpscale, asked.value_or(mReconstruction), extents, mUpscaler);
         }
     };
 }

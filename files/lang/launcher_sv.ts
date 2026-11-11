@@ -199,6 +199,10 @@
         <translation type="unfinished"></translation>
     </message>
     <message>
+        <source>NVIDIA DLSS Ray Reconstruction</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
         <source>Performance</source>
         <translation>Prestanda</translation>
     </message>

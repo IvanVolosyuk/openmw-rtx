@@ -143,6 +143,7 @@ RayTracingUpscaleUltraPerformance: "Ультрапроизводительнос
 RayTracingUpscaler: "Апскейлер"
 RayTracingUpscalerAuto: "Автоматически"
 RayTracingUpscalerDlss: "NVIDIA DLSS"
+RayTracingUpscalerDlssRr: "NVIDIA DLSS Ray Reconstruction"
 RayTracingUpscalerFsr: "AMD FSR 3.1"
 RebindAction: "Нажмите клавишу, которую нужно назначить на это действие."
 ResetControls: "Сбросить"

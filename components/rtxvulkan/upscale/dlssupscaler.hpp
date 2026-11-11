@@ -18,10 +18,16 @@ namespace Rtx
     class Device;
     class GpuTimer;
 
-    /// NVIDIA DLSS Super Resolution, through the NGX runtime the driver installs. The SDK's loader
-    /// is linked in; the model itself is the driver's, so a card and driver NGX accepts at start is
-    /// what this class needs. Feature creation and evaluation are recorded into the frame's own
-    /// command buffer, as FSR's dispatches are.
+    enum class DlssMode
+    {
+        SuperResolution,
+        RayReconstruction,
+    };
+
+    /// NVIDIA DLSS Super Resolution and Ray Reconstruction, through the NGX runtime the driver
+    /// installs. The SDK's loader is linked in; the model itself is the driver's, so a card and
+    /// driver NGX accepts at start is what this class needs. Feature creation and evaluation are
+    /// recorded into the frame's own command buffer, as FSR's dispatches are.
     ///
     /// **The SDK is the latest at build time and the preset is left at its default**, so NVIDIA's
     /// over-the-air model updates reach a build that predates them. `describe()` names the SDK the
@@ -29,11 +35,13 @@ namespace Rtx
     class DlssUpscaler
     {
     public:
-        explicit DlssUpscaler(const Device& device);
+        explicit DlssUpscaler(const Device& device, DlssMode mode = DlssMode::SuperResolution);
         ~DlssUpscaler();
 
         DlssUpscaler(const DlssUpscaler&) = delete;
         DlssUpscaler& operator=(const DlssUpscaler&) = delete;
+
+        DlssMode getMode() const { return mMode; }
 
         /// Builds what one pair of extents keeps, releasing the last, and starts a history of its
         /// own. Takes `shared`, the image `declareShared` declared, as the frame's arena placed it.
@@ -48,7 +56,7 @@ namespace Rtx
 
         /// What `resize` to these extents builds in the device's memory, apart from the shared
         /// image the arena holds.
-        static VkDeviceSize bytesAt(const Device& device, VkExtent2D render, VkExtent2D output);
+        static VkDeviceSize bytesAt(const Device& device, DlssMode mode, VkExtent2D render, VkExtent2D output);
 
         /// Lets what `resize` built go, the feature included.
         void release();
@@ -64,13 +72,14 @@ namespace Rtx
         HandedImage record(VkCommandBuffer commands, const UpscaleInputs& inputs, GpuTimer* timer);
 
         /// One line for `info`: which DLSS this binary was built against.
-        static std::string_view describe();
+        static std::string_view describe(DlssMode mode = DlssMode::SuperResolution);
 
     private:
         struct Context;
         struct Targets;
 
         const Device& mDevice;
+        DlssMode mMode = DlssMode::SuperResolution;
 
         /// NGX's process-wide state for this device, made on the first resize: a configuration
         /// that only ever runs FSR never loads the runtime.

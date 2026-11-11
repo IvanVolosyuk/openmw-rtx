@@ -47,6 +47,10 @@ namespace MWRender
             const RtxSettings derived = RtxSettings::derive(valid());
             EXPECT_EQ(derived.mUpscale, Rtx::Upscale::Balanced);
             EXPECT_EQ(derived.mUpscaler, Rtx::UpscalerKind::Dlss);
+
+            RtxSettingValues rayReconstructed = valid();
+            rayReconstructed.mUpscaler = Rtx::UpscalerKind::DlssRr;
+            EXPECT_EQ(RtxSettings::derive(rayReconstructed).mUpscaler, Rtx::UpscalerKind::DlssRr);
             EXPECT_FALSE(derived.mIndirectLighting);
             EXPECT_EQ(derived.mBounceRays, 16u);
             EXPECT_TRUE(derived.mAntiFirefly);

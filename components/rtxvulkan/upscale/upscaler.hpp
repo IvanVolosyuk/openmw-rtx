@@ -24,9 +24,9 @@ namespace Rtx
     /// upscalers write the same arena image and hand it to the display, so the rest of the frame
     /// never asks which one is running.
     ///
-    /// **`Auto` is resolved where the device is known**: DLSS where this build has NGX and the card
-    /// accepted it, FSR everywhere else. An explicit `Dlss` that cannot start is a start failure
-    /// naming why, so a test never mistakes FSR's picture for DLSS's.
+    /// **`Auto` is resolved where the device is known**: DLSS Super Resolution where this build has
+    /// NGX and the card accepted it, FSR everywhere else. An explicit `Dlss` or `DlssRr` that cannot
+    /// start is a start failure naming why, so a test never mistakes FSR's picture for DLSS's.
     class Upscaler
     {
     public:

@@ -11,6 +11,19 @@
 
 namespace Rtx
 {
+    namespace
+    {
+        constexpr bool isDlss(const UpscalerKind kind)
+        {
+            return kind == UpscalerKind::Dlss || kind == UpscalerKind::DlssRr;
+        }
+
+        constexpr DlssMode dlssModeOf(const UpscalerKind kind)
+        {
+            return kind == UpscalerKind::DlssRr ? DlssMode::RayReconstruction : DlssMode::SuperResolution;
+        }
+    }
+
     Upscaler::Upscaler(const Device& device, const UpscalerKind requested)
         : mDevice(device)
         , mKind(UpscalerKind::Fsr)
@@ -21,7 +34,7 @@ namespace Rtx
             {
                 try
                 {
-                    mDlss = std::make_unique<DlssUpscaler>(device);
+                    mDlss = std::make_unique<DlssUpscaler>(device, DlssMode::SuperResolution);
                     mKind = UpscalerKind::Dlss;
                 }
                 catch (const Unsupported& refused)
@@ -33,10 +46,10 @@ namespace Rtx
             if (mKind != UpscalerKind::Dlss)
                 mFsr = std::make_unique<FsrUpscaler>(device);
         }
-        else if (requested == UpscalerKind::Dlss)
+        else if (isDlss(requested))
         {
-            mDlss = std::make_unique<DlssUpscaler>(device);
-            mKind = UpscalerKind::Dlss;
+            mDlss = std::make_unique<DlssUpscaler>(device, dlssModeOf(requested));
+            mKind = requested;
         }
         else
         {
@@ -49,14 +62,14 @@ namespace Rtx
     void Upscaler::ensure(const UpscalerKind kind)
     {
         assert(kind != UpscalerKind::Auto && "an upscaler kind that was never resolved");
-        if (kind == mKind && (mFsr != nullptr || mDlss != nullptr))
+        if (kind == mKind && (isDlss(kind) ? mDlss != nullptr : mFsr != nullptr))
             return;
 
         mFsr.reset();
         mDlss.reset();
         mKind = kind;
-        if (mKind == UpscalerKind::Dlss)
-            mDlss = std::make_unique<DlssUpscaler>(mDevice);
+        if (isDlss(mKind))
+            mDlss = std::make_unique<DlssUpscaler>(mDevice, dlssModeOf(mKind));
         else
             mFsr = std::make_unique<FsrUpscaler>(mDevice);
     }
@@ -64,11 +77,10 @@ namespace Rtx
     void Upscaler::resize(
         const UpscalerKind kind, const VkExtent2D render, const VkExtent2D output, const ArenaRun& shared)
     {
-        if (kind != mKind || (kind == UpscalerKind::Fsr && mFsr == nullptr)
-            || (kind == UpscalerKind::Dlss && mDlss == nullptr))
+        if (kind != mKind || (isDlss(kind) ? mDlss == nullptr : mFsr == nullptr))
             ensure(kind);
 
-        if (mKind == UpscalerKind::Dlss)
+        if (isDlss(mKind))
             mDlss->resize(render, output, shared);
         else
             mFsr->resize(render, output, shared);
@@ -80,6 +92,7 @@ namespace Rtx
         switch (kind)
         {
             case UpscalerKind::Dlss:
+            case UpscalerKind::DlssRr:
                 DlssUpscaler::declareShared(render, output, into);
                 break;
             case UpscalerKind::Fsr:
@@ -91,14 +104,14 @@ namespace Rtx
 
     std::size_t Upscaler::getSharedCount(const UpscalerKind kind)
     {
-        return kind == UpscalerKind::Dlss ? DlssUpscaler::getSharedCount() : FsrUpscaler::getSharedCount();
+        return isDlss(kind) ? DlssUpscaler::getSharedCount() : FsrUpscaler::getSharedCount();
     }
 
     VkDeviceSize Upscaler::bytesAt(
         const Device& device, const UpscalerKind kind, const VkExtent2D render, const VkExtent2D output)
     {
-        return kind == UpscalerKind::Dlss ? DlssUpscaler::bytesAt(device, render, output)
-                                          : FsrUpscaler::bytesAt(device, render, output);
+        return isDlss(kind) ? DlssUpscaler::bytesAt(device, dlssModeOf(kind), render, output)
+                            : FsrUpscaler::bytesAt(device, render, output);
     }
 
     void Upscaler::release()
@@ -113,19 +126,19 @@ namespace Rtx
     {
         if (kind != mKind)
             return false;
-        return mKind == UpscalerKind::Dlss ? mDlss->isBuilt() : mFsr->isBuilt();
+        return isDlss(mKind) ? mDlss->isBuilt() : mFsr->isBuilt();
     }
 
     bool Upscaler::isAt(const UpscalerKind kind, const VkExtent2D render, const VkExtent2D output) const
     {
         if (kind != mKind)
             return false;
-        return mKind == UpscalerKind::Dlss ? mDlss->isAt(render, output) : mFsr->isAt(render, output);
+        return isDlss(mKind) ? mDlss->isAt(render, output) : mFsr->isAt(render, output);
     }
 
     void Upscaler::reset()
     {
-        if (mKind == UpscalerKind::Dlss)
+        if (isDlss(mKind))
             mDlss->reset();
         else
             mFsr->reset();
@@ -133,19 +146,18 @@ namespace Rtx
 
     bool Upscaler::isFresh() const
     {
-        return mKind == UpscalerKind::Dlss ? mDlss->isFresh() : mFsr->isFresh();
+        return isDlss(mKind) ? mDlss->isFresh() : mFsr->isFresh();
     }
 
     HandedImage Upscaler::record(
         const UpscalerKind kind, const VkCommandBuffer commands, const UpscaleInputs& inputs, GpuTimer* timer)
     {
         assert(kind == mKind && "a frame asked one upscaler and the frame's is another");
-        return mKind == UpscalerKind::Dlss ? mDlss->record(commands, inputs, timer)
-                                           : mFsr->record(commands, inputs, timer);
+        return isDlss(mKind) ? mDlss->record(commands, inputs, timer) : mFsr->record(commands, inputs, timer);
     }
 
     std::string_view Upscaler::describe() const
     {
-        return mKind == UpscalerKind::Dlss ? DlssUpscaler::describe() : FsrUpscaler::describe();
+        return isDlss(mKind) ? DlssUpscaler::describe(dlssModeOf(mKind)) : FsrUpscaler::describe();
     }
 }

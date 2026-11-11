@@ -16,4 +16,9 @@ namespace Rtx::Dlss
     {
         return false;
     }
+
+    bool isRayReconstructionSupported(VkInstance, VkPhysicalDevice)
+    {
+        return false;
+    }
 }

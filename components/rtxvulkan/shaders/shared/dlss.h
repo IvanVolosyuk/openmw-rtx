@@ -14,6 +14,8 @@
 #define DLSS_DEPTH_FORMAT STORAGE_R32F
 #define DLSS_MOTION_FORMAT STORAGE_RG16F
 #define DLSS_OUTPUT_FORMAT STORAGE_RGBA16F
+#define DLSSD_ALBEDO_FORMAT STORAGE_RGBA16F
+#define DLSSD_NORMAL_ROUGHNESS_FORMAT STORAGE_RGBA16F
 
 #ifdef RTX_HOST
 namespace Rtx::Shaders
@@ -30,17 +32,42 @@ namespace Rtx::Shaders
         uint mFrame;
     };
 
-    /// The input resolve's bindings, in the order the host writes them.
+    /// What the DLSS Ray Reconstruction input resolve reads of the frame: the two eyes, the far
+    /// plane written where a ray meets the sky, the frame whose field mapping wrote the channels,
+    /// and whether the scene carries specular lobes (`CHANNEL_SPECULAR` / `CHANNEL_SPECULAR_ALBEDO`).
+    struct DlssdInputConstants
+    {
+        Eyes mEyes;
+        float mFar;
+        uint mFrame;
+        uint mLobed;
+    };
+
+    /// The Super Resolution input resolve's bindings, in the order the host writes them.
     const uint DLSS_INPUTS_BIND_SURFACE = 0;
     const uint DLSS_INPUTS_BIND_MOTION = 1;
     const uint DLSS_INPUTS_BIND_DEPTH = 2;
     const uint DLSS_INPUTS_BIND_MOTION_OUT = 3;
     const uint DLSS_INPUTS_BIND_CONSTANTS = 4;
 
+    /// The Ray Reconstruction input resolve's bindings, in the order the host writes them.
+    const uint DLSSD_INPUTS_BIND_SURFACE = 0;
+    const uint DLSSD_INPUTS_BIND_MOTION = 1;
+    const uint DLSSD_INPUTS_BIND_ALBEDO = 2;
+    const uint DLSSD_INPUTS_BIND_SPECULAR = 3;
+    const uint DLSSD_INPUTS_BIND_SPECULAR_ALBEDO = 4;
+    const uint DLSSD_INPUTS_BIND_DEPTH = 5;
+    const uint DLSSD_INPUTS_BIND_MOTION_OUT = 6;
+    const uint DLSSD_INPUTS_BIND_DIFFUSE_ALBEDO_OUT = 7;
+    const uint DLSSD_INPUTS_BIND_SPECULAR_ALBEDO_OUT = 8;
+    const uint DLSSD_INPUTS_BIND_NORMAL_ROUGHNESS_OUT = 9;
+    const uint DLSSD_INPUTS_BIND_CONSTANTS = 10;
+
     /// The resolve's square workgroup: eight pixels on a side, as the trace's own stages use.
     const uint DLSS_INPUT_WORKGROUP = 8;
 
 #ifdef RTX_HOST
+    static_assert(sizeof(DlssdInputConstants) == sizeof(Eyes) + 12, "DlssdInputConstants must be scalar-packed");
 }
 #endif
 

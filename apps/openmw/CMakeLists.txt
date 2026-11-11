@@ -174,9 +174,10 @@ if(BUILD_OPENMW)
 
     target_link_libraries(openmw openmw-lib)
 
-    if (OPENMW_RTX_DLSS AND OPENMW_DLSS_RUNTIME_FILE)
+    if (OPENMW_RTX_DLSS AND OPENMW_DLSS_RUNTIME_FILE AND OPENMW_DLSSD_RUNTIME_FILE)
         add_custom_command(TARGET openmw POST_BUILD
-            COMMAND ${CMAKE_COMMAND} -E copy_if_different "${OPENMW_DLSS_RUNTIME_FILE}" "$<TARGET_FILE_DIR:openmw>")
+            COMMAND ${CMAKE_COMMAND} -E copy_if_different
+                "${OPENMW_DLSS_RUNTIME_FILE}" "${OPENMW_DLSSD_RUNTIME_FILE}" "$<TARGET_FILE_DIR:openmw>")
     endif ()
 
     # Workaround necessary to ensure osgAnimation::MatrixLinearSampler dynamic casts work under Clang

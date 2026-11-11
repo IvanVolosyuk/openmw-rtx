@@ -74,6 +74,7 @@ set(RTX_SHADERS
     shaders/trace/denoise/shadowmask.comp
     shaders/trace/denoise/shadowtiles.comp
     shaders/trace/denoise/specular.comp
+    shaders/upscale/dlssdinputs.comp
     shaders/upscale/dlssinputs.comp
     shaders/upscale/fsraccumulate.comp
     shaders/upscale/fsrchange.comp
@@ -572,12 +573,14 @@ target_compile_definitions(openmw-rtx-vulkan PRIVATE OPENMW_RTX_DLSS=$<BOOL:${OP
 if (OPENMW_RTX_DLSS)
     target_include_directories(openmw-rtx-vulkan SYSTEM PRIVATE "${OPENMW_DLSS_INCLUDE_DIR}")
     target_link_libraries(openmw-rtx-vulkan PRIVATE openmw-rtx-dlss)
-    install(FILES "${OPENMW_DLSS_RUNTIME_FILE}" DESTINATION "${CMAKE_INSTALL_BINDIR}")
+    install(FILES "${OPENMW_DLSS_RUNTIME_FILE}" "${OPENMW_DLSSD_RUNTIME_FILE}" DESTINATION "${CMAKE_INSTALL_BINDIR}")
     if (OPENMW_DLSS_LICENSE)
         install(FILES "${OPENMW_DLSS_LICENSE}" DESTINATION "${CMAKE_INSTALL_DOCDIR}/licenses"
             RENAME "NVIDIA-RTX-SDK.txt")
     endif ()
     set(OPENMW_DLSS_RUNTIME_FILE "${OPENMW_DLSS_RUNTIME_FILE}" CACHE INTERNAL "DLSS runtime beside the game")
+    set(OPENMW_DLSSD_RUNTIME_FILE "${OPENMW_DLSSD_RUNTIME_FILE}" CACHE INTERNAL
+        "DLSS Ray Reconstruction runtime beside the game")
 endif ()
 
 add_dependencies(openmw-rtx-vulkan openmw-rtx-vulkan-shaders)

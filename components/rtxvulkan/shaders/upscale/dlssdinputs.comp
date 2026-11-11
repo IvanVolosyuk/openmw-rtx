@@ -1,0 +1,91 @@
+#version 460
+
+#extension GL_GOOGLE_include_directive : require
+#extension GL_EXT_samplerless_texture_functions : require
+#extension GL_EXT_shader_image_load_formatted : require
+
+// Unpacks the trace's checkerboard G-buffer channels into the per-pixel primary-hit guide images
+// DLSS Ray Reconstruction (`DLSSD`) reads: positive linear view-space depth, primary screen-space
+// motion in render pixels, diffuse albedo, directional specular albedo, and world-space shading
+// normal packed with linear roughness in alpha.
+
+#include "camera.h"
+#include "gbuffer.h"
+#include "shared/dlss.h"
+#include "shared/fields.h"
+#include "shared/sets.h"
+
+#include "lib/census.glsl"
+#include "lib/pixels.glsl"
+
+layout(set = SET_PASS, binding = DLSSD_INPUTS_BIND_SURFACE, GBUFFER_SURFACE) uniform readonly image2D r_surface;
+layout(set = SET_PASS, binding = DLSSD_INPUTS_BIND_MOTION, GBUFFER_MOTION) uniform readonly image2D r_motion;
+layout(set = SET_PASS, binding = DLSSD_INPUTS_BIND_ALBEDO, GBUFFER_ALBEDO) uniform readonly image2D r_albedo;
+// No format: `CHANNEL_SPECULAR` takes the run's radiance width (`Shown` or `Summed`).
+layout(set = SET_PASS, binding = DLSSD_INPUTS_BIND_SPECULAR) uniform readonly image2D r_specular;
+layout(set = SET_PASS, binding = DLSSD_INPUTS_BIND_SPECULAR_ALBEDO, GBUFFER_ALBEDO) uniform readonly image2D
+    r_specularAlbedo;
+
+layout(set = SET_PASS, binding = DLSSD_INPUTS_BIND_DEPTH, DLSS_DEPTH_FORMAT) writeonly uniform image2D rw_depth;
+layout(set = SET_PASS, binding = DLSSD_INPUTS_BIND_MOTION_OUT, DLSS_MOTION_FORMAT) writeonly uniform image2D rw_motion;
+layout(set = SET_PASS, binding = DLSSD_INPUTS_BIND_DIFFUSE_ALBEDO_OUT, DLSSD_ALBEDO_FORMAT) writeonly uniform image2D
+    rw_diffuseAlbedo;
+layout(set = SET_PASS, binding = DLSSD_INPUTS_BIND_SPECULAR_ALBEDO_OUT, DLSSD_ALBEDO_FORMAT) writeonly uniform image2D
+    rw_specularAlbedo;
+layout(set = SET_PASS, binding = DLSSD_INPUTS_BIND_NORMAL_ROUGHNESS_OUT,
+    DLSSD_NORMAL_ROUGHNESS_FORMAT) writeonly uniform image2D rw_normalRoughness;
+
+layout(set = SET_PASS, binding = DLSSD_INPUTS_BIND_CONSTANTS, scalar) uniform cbDlssd_t
+{
+    DlssdInputConstants cbDlssd;
+};
+
+layout(local_size_x = DLSS_INPUT_WORKGROUP, local_size_y = DLSS_INPUT_WORKGROUP) in;
+
+void main()
+{
+    const ivec2 pixel = ivec2(gl_GlobalInvocationID.xy);
+    const uvec2 extent = uvec2(cbDlssd.mEyes.mWorld.mWidth, cbDlssd.mEyes.mWorld.mHeight);
+    if (outsideOf(uvec2(pixel), extent))
+        return;
+
+    const uint swap = fieldSwapOf(cbDlssd.mFrame);
+    const ivec2 stored = channelAt(CHANNEL_SURFACE, pixel, extent.x, swap);
+    const vec2 seen = imageLoad(r_surface, stored).rg;
+    const bool hit = seen.x != SURFACE_NO_NORMAL;
+
+    float linearDepth = cbDlssd.mFar;
+    vec3 normal = vec3(0.0);
+    vec3 diffuseAlbedo = vec3(0.0);
+    vec3 specularAlbedo = vec3(0.0);
+    float roughness = 1.0;
+
+    if (hit)
+    {
+        const Camera eye = eyeOfPixel(seen.y, cbDlssd.mEyes);
+        const float along = surfaceDistance(seen.y) * dot(rayAt(eye, vec2(pixel)).mDirection, eye.mBasis.mForward);
+        linearDepth = max(along, 0.0);
+        normal = unpackSurfaceNormal(seen.x);
+        diffuseAlbedo = max(imageLoad(r_albedo, channelAt(CHANNEL_ALBEDO, pixel, extent.x, swap)).rgb, vec3(0.0));
+
+        if (cbDlssd.mLobed != 0u)
+        {
+            const float lobeRoughness = imageLoad(r_specular, channelAt(CHANNEL_SPECULAR, pixel, extent.x, swap)).a;
+            if (lobeRoughness >= 0.0)
+            {
+                roughness = clamp(lobeRoughness, 0.0, 1.0);
+                specularAlbedo = max(
+                    imageLoad(r_specularAlbedo, channelAt(CHANNEL_SPECULAR_ALBEDO, pixel, extent.x, swap)).rgb,
+                    vec3(0.0));
+            }
+        }
+    }
+
+    const vec2 motion = imageLoad(r_motion, channelAt(CHANNEL_MOTION, pixel, extent.x, swap)).xy;
+
+    RTX_STORE_COUNTED(rw_depth, pixel, vec4(linearDepth, 0.0, 0.0, 0.0))
+    RTX_STORE_COUNTED(rw_motion, pixel, vec4(motion, 0.0, 0.0))
+    RTX_STORE_COUNTED(rw_diffuseAlbedo, pixel, vec4(diffuseAlbedo, 0.0))
+    RTX_STORE_COUNTED(rw_specularAlbedo, pixel, vec4(specularAlbedo, 0.0))
+    RTX_STORE_COUNTED(rw_normalRoughness, pixel, vec4(normal, roughness))
+}

@@ -312,6 +312,11 @@ target_compile_definitions(rtx-gpu-tests
             OPENMW_PROJECT_SOURCE_DIR=u8"${PROJECT_SOURCE_DIR}"
             OPENMW_RTX_SHADER_DIR="${RTX_SPIRV_DIR}"
             OPENMW_RTX_CENSUS_SHADER_DIR="${RTX_SPIRV_CENSUS_DIR}")
+if (OPENMW_RTX_DLSS AND OPENMW_DLSS_RUNTIME_FILE AND OPENMW_DLSSD_RUNTIME_FILE)
+    add_custom_command(TARGET rtx-gpu-tests POST_BUILD
+        COMMAND ${CMAKE_COMMAND} -E copy_if_different
+            "${OPENMW_DLSS_RUNTIME_FILE}" "${OPENMW_DLSSD_RUNTIME_FILE}" "$<TARGET_FILE_DIR:rtx-gpu-tests>")
+endif ()
 if (UNIX AND NOT APPLE)
     target_link_libraries(rtx-gpu-tests ${CMAKE_THREAD_LIBS_INIT})
 endif()

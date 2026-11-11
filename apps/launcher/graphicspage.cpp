@@ -40,6 +40,7 @@ namespace
         { Rtx::UpscalerKind::Auto, QT_TRANSLATE_NOOP("GraphicsPage", "Auto") },
         { Rtx::UpscalerKind::Fsr, QT_TRANSLATE_NOOP("GraphicsPage", "AMD FSR 3.1") },
         { Rtx::UpscalerKind::Dlss, QT_TRANSLATE_NOOP("GraphicsPage", "NVIDIA DLSS") },
+        { Rtx::UpscalerKind::DlssRr, QT_TRANSLATE_NOOP("GraphicsPage", "NVIDIA DLSS Ray Reconstruction") },
     } };
     static_assert(Rtx::followsMenu(sUpscalerLabels, Rtx::sUpscalerMenu));
 

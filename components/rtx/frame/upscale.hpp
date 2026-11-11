@@ -15,15 +15,17 @@ namespace Rtx
     /// Which upscaler stands between the trace and the screen. The quality mode stays `Upscale`;
     /// this chooses whose arithmetic turns the traced extent into the shown one.
     ///
-    /// **`Auto` is a policy and not a third upscaler**: the backend resolves it once, where the
+    /// **`Auto` is a policy and not a concrete upscaler**: the backend resolves it once, where the
     /// device is known, to DLSS where the build has NGX and the card is NVIDIA, and to FSR
     /// everywhere else. The resolved value is what a `RenderProfile` carries after a renderer is
-    /// made, so a frame never asks the question twice.
+    /// made, so a frame never asks the question twice. `DlssRr` runs NVIDIA's Ray Reconstruction in
+    /// place of both the renderer's denoisers and DLSS Super Resolution when explicitly selected.
     enum class UpscalerKind
     {
         Auto,
         Fsr,
         Dlss,
+        DlssRr,
     };
 
     /// How an `UpscalerKind` is spelled in a setting file and in a report — the one list of the
@@ -32,10 +34,11 @@ namespace Rtx
         std::pair{ UpscalerKind::Auto, std::string_view("auto") },
         std::pair{ UpscalerKind::Fsr, std::string_view("fsr") },
         std::pair{ UpscalerKind::Dlss, std::string_view("dlss") },
+        std::pair{ UpscalerKind::DlssRr, std::string_view("dlss-rr") },
     } };
 
     /// The upscalers the launcher and the settings window offer, in the order both list them:
-    /// `auto` first, then the two concrete choices. Every value `sUpscalerNames` spells, in its
+    /// `auto` first, then the three concrete choices. Every value `sUpscalerNames` spells, in its
     /// order, so a value added there stops the build until each menu gives it a label.
     inline constexpr std::array<UpscalerKind, sUpscalerNames.mNames.size()> sUpscalerMenu = sUpscalerNames.values();
 

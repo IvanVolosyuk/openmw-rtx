@@ -387,7 +387,7 @@ namespace RtxTool
             "textures the town itself never names");
 
         option(sFramed, "upscaler", bpo::value<std::string>()->default_value("fsr"),
-            "reconstruction backend: fsr, dlss or auto. FSR by default for repeatable measurements");
+            "reconstruction backend: fsr, dlss, dlss-rr or auto. FSR by default for repeatable measurements");
         option(otherThan(Verbs::Info | Verbs::Film), "upscale",
             bpo::value<std::string>()->default_value(
                 std::string(Rtx::sUpscaleNames.name(byDefault.mSetup.mRun.mProfile.mUpscale))),

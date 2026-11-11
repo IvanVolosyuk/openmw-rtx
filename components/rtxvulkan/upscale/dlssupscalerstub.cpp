@@ -14,8 +14,9 @@ namespace Rtx
     {
     };
 
-    DlssUpscaler::DlssUpscaler(const Device& device)
+    DlssUpscaler::DlssUpscaler(const Device& device, const DlssMode mode)
         : mDevice(device)
+        , mMode(mode)
     {
     }
 
@@ -28,7 +29,7 @@ namespace Rtx
         return 0;
     }
 
-    VkDeviceSize DlssUpscaler::bytesAt(const Device&, VkExtent2D, VkExtent2D)
+    VkDeviceSize DlssUpscaler::bytesAt(const Device&, DlssMode, VkExtent2D, VkExtent2D)
     {
         return 0;
     }
@@ -50,8 +51,8 @@ namespace Rtx
         throw Unsupported("this build was made without NVIDIA's DLSS SDK");
     }
 
-    std::string_view DlssUpscaler::describe()
+    std::string_view DlssUpscaler::describe(const DlssMode mode)
     {
-        return "DLSS (not built)";
+        return mode == DlssMode::RayReconstruction ? "DLSS Ray Reconstruction (not built)" : "DLSS (not built)";
     }
 }

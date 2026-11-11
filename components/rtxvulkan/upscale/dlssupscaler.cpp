@@ -1,10 +1,12 @@
 #include "dlssupscaler.hpp"
 
+#include <algorithm>
 #include <array>
 #include <cassert>
 #include <cstdint>
 #include <filesystem>
 #include <format>
+#include <optional>
 #include <span>
 #include <stdexcept>
 #include <string>
@@ -12,9 +14,15 @@
 #include <utility>
 #include <vector>
 
+// clang-format off
+// `nvsdk_ngx_helpers_dlssd_vk.h` uses `NVSDK_NGX_ENSURE_VK_IMAGEVIEW`, defined in
+// `nvsdk_ngx_helpers_vk.h`, without including it first.
 #include <nvsdk_ngx.h>
 #include <nvsdk_ngx_helpers_vk.h>
+#include <nvsdk_ngx_helpers_dlssd_vk.h>
 #include <nvsdk_ngx_params.h>
+#include <nvsdk_ngx_params_dlssd.h>
+// clang-format on
 
 #include <components/debug/debuglog.hpp>
 #include <components/rtx/common/error.hpp>
@@ -39,15 +47,30 @@ namespace Rtx
 {
     namespace
     {
-        /// What the input resolve binds, in the shader's own numbering. The surface and motion
-        /// channels are storage images: the trace left them in `GENERAL`, and a resolve only ever
-        /// loads texels.
+        /// What the Super Resolution input resolve binds, in the shader's own numbering. The surface
+        /// and motion channels are storage images: the trace left them in `GENERAL`, and a resolve
+        /// only ever loads texels.
         constexpr std::array sInputBindings{
             computeBinding(Shaders::DLSS_INPUTS_BIND_SURFACE, VK_DESCRIPTOR_TYPE_STORAGE_IMAGE),
             computeBinding(Shaders::DLSS_INPUTS_BIND_MOTION, VK_DESCRIPTOR_TYPE_STORAGE_IMAGE),
             computeBinding(Shaders::DLSS_INPUTS_BIND_DEPTH, VK_DESCRIPTOR_TYPE_STORAGE_IMAGE),
             computeBinding(Shaders::DLSS_INPUTS_BIND_MOTION_OUT, VK_DESCRIPTOR_TYPE_STORAGE_IMAGE),
             computeBinding(Shaders::DLSS_INPUTS_BIND_CONSTANTS, VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER),
+        };
+
+        /// What the Ray Reconstruction input resolve binds, in the shader's own numbering.
+        constexpr std::array sRrInputBindings{
+            computeBinding(Shaders::DLSSD_INPUTS_BIND_SURFACE, VK_DESCRIPTOR_TYPE_STORAGE_IMAGE),
+            computeBinding(Shaders::DLSSD_INPUTS_BIND_MOTION, VK_DESCRIPTOR_TYPE_STORAGE_IMAGE),
+            computeBinding(Shaders::DLSSD_INPUTS_BIND_ALBEDO, VK_DESCRIPTOR_TYPE_STORAGE_IMAGE),
+            computeBinding(Shaders::DLSSD_INPUTS_BIND_SPECULAR, VK_DESCRIPTOR_TYPE_STORAGE_IMAGE),
+            computeBinding(Shaders::DLSSD_INPUTS_BIND_SPECULAR_ALBEDO, VK_DESCRIPTOR_TYPE_STORAGE_IMAGE),
+            computeBinding(Shaders::DLSSD_INPUTS_BIND_DEPTH, VK_DESCRIPTOR_TYPE_STORAGE_IMAGE),
+            computeBinding(Shaders::DLSSD_INPUTS_BIND_MOTION_OUT, VK_DESCRIPTOR_TYPE_STORAGE_IMAGE),
+            computeBinding(Shaders::DLSSD_INPUTS_BIND_DIFFUSE_ALBEDO_OUT, VK_DESCRIPTOR_TYPE_STORAGE_IMAGE),
+            computeBinding(Shaders::DLSSD_INPUTS_BIND_SPECULAR_ALBEDO_OUT, VK_DESCRIPTOR_TYPE_STORAGE_IMAGE),
+            computeBinding(Shaders::DLSSD_INPUTS_BIND_NORMAL_ROUGHNESS_OUT, VK_DESCRIPTOR_TYPE_STORAGE_IMAGE),
+            computeBinding(Shaders::DLSSD_INPUTS_BIND_CONSTANTS, VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER),
         };
 
         constexpr ImageUse sInputWrite{ VK_IMAGE_LAYOUT_GENERAL, VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT,
@@ -84,6 +107,11 @@ namespace Rtx
             return std::format("NGX result {:#x}", static_cast<std::uint32_t>(result));
         }
 
+        std::string_view modeName(const DlssMode mode)
+        {
+            return mode == DlssMode::RayReconstruction ? "NVIDIA DLSS Ray Reconstruction" : "NVIDIA DLSS";
+        }
+
         ImageDescription depthDescription(const VkExtent2D extent)
         {
             return ImageDescription{ .mWidth = extent.width,
@@ -97,6 +125,22 @@ namespace Rtx
             return ImageDescription{ .mWidth = extent.width,
                 .mHeight = extent.height,
                 .mFormat = toVulkanFormat(DLSS_MOTION_FORMAT),
+                .mUsage = VK_IMAGE_USAGE_STORAGE_BIT | VK_IMAGE_USAGE_SAMPLED_BIT };
+        }
+
+        ImageDescription albedoDescription(const VkExtent2D extent)
+        {
+            return ImageDescription{ .mWidth = extent.width,
+                .mHeight = extent.height,
+                .mFormat = toVulkanFormat(DLSSD_ALBEDO_FORMAT),
+                .mUsage = VK_IMAGE_USAGE_STORAGE_BIT | VK_IMAGE_USAGE_SAMPLED_BIT };
+        }
+
+        ImageDescription normalRoughnessDescription(const VkExtent2D extent)
+        {
+            return ImageDescription{ .mWidth = extent.width,
+                .mHeight = extent.height,
+                .mFormat = toVulkanFormat(DLSSD_NORMAL_ROUGHNESS_FORMAT),
                 .mUsage = VK_IMAGE_USAGE_STORAGE_BIT | VK_IMAGE_USAGE_SAMPLED_BIT };
         }
 
@@ -119,18 +163,101 @@ namespace Rtx
                 image.getFormat(), image.getWidth(), image.getHeight(),
                 (image.getUsage() & VK_IMAGE_USAGE_STORAGE_BIT) != 0);
         }
+
+        /// Builds `WorldToViewMatrix` and `ViewToClipMatrix` in column-major order (which equals
+        /// row-major left-multiply, as NGX's `DLSSD` evaluation asks) from the camera basis and
+        /// origin `sampleFrame` handed the trace.
+        void fillDlssdMatrices(
+            const UpscaleInputs& inputs, std::array<float, 16>& worldToView, std::array<float, 16>& viewToClip)
+        {
+            const Shaders::Camera& eye = inputs.mEyes.mWorld;
+            const float halfW = std::max(eye.mBasis.mRight.length(), 1.0e-6f);
+            const float halfH = std::max(eye.mBasis.mUp.length(), 1.0e-6f);
+            const Shaders::vec3 rx = eye.mBasis.mRight * (1.0f / halfW);
+            const Shaders::vec3 uy = eye.mBasis.mUp * (1.0f / halfH);
+            const Shaders::vec3 bz = -eye.mBasis.mForward;
+            const Shaders::vec3& origin = inputs.mOrigin;
+
+            worldToView = {
+                rx.x(),
+                uy.x(),
+                bz.x(),
+                0.0f,
+                rx.y(),
+                uy.y(),
+                bz.y(),
+                0.0f,
+                rx.z(),
+                uy.z(),
+                bz.z(),
+                0.0f,
+                -(rx * origin),
+                -(uy * origin),
+                -(bz * origin),
+                1.0f,
+            };
+
+            const float near = FsrFrame::sNear;
+            const float far = std::max(inputs.mFar, near + 1.0f);
+            if (eye.mOrthographic != 0u)
+            {
+                viewToClip = {
+                    1.0f / halfW,
+                    0.0f,
+                    0.0f,
+                    0.0f,
+                    0.0f,
+                    -1.0f / halfH,
+                    0.0f,
+                    0.0f,
+                    0.0f,
+                    0.0f,
+                    1.0f / (near - far),
+                    0.0f,
+                    -eye.mBasis.mCentre.x(),
+                    -eye.mBasis.mCentre.y(),
+                    near / (near - far),
+                    1.0f,
+                };
+                return;
+            }
+
+            viewToClip = {
+                1.0f / halfW,
+                0.0f,
+                0.0f,
+                0.0f,
+                0.0f,
+                -1.0f / halfH,
+                0.0f,
+                0.0f,
+                -eye.mBasis.mCentre.x(),
+                -eye.mBasis.mCentre.y(),
+                far / (near - far),
+                -1.0f,
+                0.0f,
+                0.0f,
+                -(far * near) / (far - near),
+                0.0f,
+            };
+        }
     }
 
     /// NGX's process-wide state for one device, made where DLSS first builds its targets. A
     /// configuration that only runs FSR never loads the runtime.
     struct DlssUpscaler::Context
     {
-        explicit Context(const Device& device)
+        Context(const Device& device, const DlssMode mode)
             : mDevice(device)
-            , mInputs(device, sInputBindings, {}, "dlssinputs.comp.spv", "dlss inputs")
+            , mInputs(mode == DlssMode::RayReconstruction
+                      ? ComputePipeline<NoConstants>(
+                          device, sRrInputBindings, {}, "dlssdinputs.comp.spv", "dlssd inputs")
+                      : ComputePipeline<NoConstants>(device, sInputBindings, {}, "dlssinputs.comp.spv", "dlss inputs"))
             , mBlocks([&](const FrameSlot) {
-                return Buffer::hostWritten(
-                    device, sizeof(Shaders::DlssInputConstants), VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT, "dlss constants");
+                const VkDeviceSize blockBytes = mode == DlssMode::RayReconstruction
+                    ? sizeof(Shaders::DlssdInputConstants)
+                    : sizeof(Shaders::DlssInputConstants);
+                return Buffer::hostWritten(device, blockBytes, VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT, "dlss constants");
             })
         {
             const std::wstring path = std::filesystem::temp_directory_path().wstring();
@@ -138,24 +265,28 @@ namespace Rtx
                 NVSDK_NGX_ENGINE_TYPE_CUSTOM, "OpenMW RTX", path.c_str(), device.getInstanceHandle(),
                 device.getPhysicalDevice().getHandle(), device.getHandle());
             if (NVSDK_NGX_FAILED(init))
-                throw Unsupported("NVIDIA DLSS could not initialize NGX: " + resultText(init)
-                    + "; the DLSS SDK's runtime library must sit beside the game");
+                throw Unsupported(std::string(modeName(mode)) + " could not initialize NGX: " + resultText(init)
+                    + "; the DLSS SDK's runtime libraries must sit beside the game");
 
             const NVSDK_NGX_Result allocated = NVSDK_NGX_VULKAN_GetCapabilityParameters(&mParameters);
             if (NVSDK_NGX_FAILED(allocated) || mParameters == nullptr)
             {
                 NVSDK_NGX_VULKAN_Shutdown1(device.getHandle());
-                throw Unsupported("NVIDIA DLSS could not read NGX's capabilities: " + resultText(allocated));
+                throw Unsupported(
+                    std::string(modeName(mode)) + " could not read NGX's capabilities: " + resultText(allocated));
             }
 
             int available = 0;
-            const NVSDK_NGX_Result queried = mParameters->Get(NVSDK_NGX_Parameter_SuperSampling_Available, &available);
+            const char* const capability = mode == DlssMode::RayReconstruction
+                ? NVSDK_NGX_Parameter_SuperSamplingDenoising_Available
+                : NVSDK_NGX_Parameter_SuperSampling_Available;
+            const NVSDK_NGX_Result queried = mParameters->Get(capability, &available);
             if (NVSDK_NGX_FAILED(queried) || available == 0)
             {
                 NVSDK_NGX_VULKAN_DestroyParameters(mParameters);
                 mParameters = nullptr;
                 NVSDK_NGX_VULKAN_Shutdown1(device.getHandle());
-                throw Unsupported("NVIDIA DLSS is not available on this card or driver");
+                throw Unsupported(std::string(modeName(mode)) + " is not available on this card or driver");
             }
 
             // The memory a released feature holds is cached by default for the next creation.
@@ -182,13 +313,21 @@ namespace Rtx
 
     struct DlssUpscaler::Targets
     {
-        Targets(const Device& device, const VkExtent2D render, const VkExtent2D output, const ArenaRun& shared)
+        Targets(const Device& device, const DlssMode mode, const VkExtent2D render, const VkExtent2D output,
+            const ArenaRun& shared)
             : mRender(render)
             , mOutput(output)
             , mShared(shared)
             , mDepth(MemoryUse::Frame, device, depthDescription(render), "dlss-depth")
             , mMotion(MemoryUse::Frame, device, motionDescription(render), "dlss-motion")
         {
+            if (mode == DlssMode::RayReconstruction)
+            {
+                mDiffuseAlbedo.emplace(MemoryUse::Frame, device, albedoDescription(render), "dlssd-diffuse-albedo");
+                mSpecularAlbedo.emplace(MemoryUse::Frame, device, albedoDescription(render), "dlssd-specular-albedo");
+                mNormalRoughness.emplace(
+                    MemoryUse::Frame, device, normalRoughnessDescription(render), "dlssd-normal-roughness");
+            }
         }
 
         ~Targets()
@@ -205,12 +344,16 @@ namespace Rtx
         ArenaRun mShared;
         Image mDepth;
         Image mMotion;
+        std::optional<Image> mDiffuseAlbedo;
+        std::optional<Image> mSpecularAlbedo;
+        std::optional<Image> mNormalRoughness;
         NVSDK_NGX_Handle* mFeature = nullptr;
     };
 
-    DlssUpscaler::DlssUpscaler(const Device& device)
+    DlssUpscaler::DlssUpscaler(const Device& device, const DlssMode mode)
         : mDevice(device)
-        , mContext(std::make_unique<Context>(device))
+        , mMode(mode)
+        , mContext(std::make_unique<Context>(device, mode))
     {
     }
 
@@ -228,9 +371,15 @@ namespace Rtx
         return 1;
     }
 
-    VkDeviceSize DlssUpscaler::bytesAt(const Device& device, const VkExtent2D render, const VkExtent2D)
+    VkDeviceSize DlssUpscaler::bytesAt(
+        const Device& device, const DlssMode mode, const VkExtent2D render, const VkExtent2D)
     {
-        return Image::bytesFor(device, depthDescription(render)) + Image::bytesFor(device, motionDescription(render));
+        VkDeviceSize bytes
+            = Image::bytesFor(device, depthDescription(render)) + Image::bytesFor(device, motionDescription(render));
+        if (mode == DlssMode::RayReconstruction)
+            bytes += 2 * Image::bytesFor(device, albedoDescription(render))
+                + Image::bytesFor(device, normalRoughnessDescription(render));
+        return bytes;
     }
 
     void DlssUpscaler::resize(const VkExtent2D render, const VkExtent2D output, const ArenaRun& shared)
@@ -246,32 +395,58 @@ namespace Rtx
 
         // **The feature is made after the device and with a command buffer**, as NGX's Vulkan
         // integration asks: creation records its own work, and a resize is already a drained point.
-        mTargets = std::make_unique<Targets>(mDevice, render, output, shared);
-
-        NVSDK_NGX_DLSS_Create_Params create{};
-        create.Feature.InWidth = render.width;
-        create.Feature.InHeight = render.height;
-        create.Feature.InTargetWidth = output.width;
-        create.Feature.InTargetHeight = output.height;
-        create.Feature.InPerfQualityValue = qualityOf(render, output);
-
-        // Motion projects the surface at both ends without jitter: a stationary surface has zero
-        // motion even as rayAt samples a different subpixel. Marking it jittered makes NGX subtract
-        // a jitter delta that is not there. Depth is reversed and colour is linear HDR; exposure is
-        // DLSS's own meter, because the renderer's meter runs after the upscaler.
-        create.InFeatureCreateFlags = NVSDK_NGX_DLSS_Feature_Flags_IsHDR | NVSDK_NGX_DLSS_Feature_Flags_MVLowRes
-            | NVSDK_NGX_DLSS_Feature_Flags_DepthInverted | NVSDK_NGX_DLSS_Feature_Flags_AutoExposure;
-        create.InEnableOutputSubrects = false;
+        mTargets = std::make_unique<Targets>(mDevice, mMode, render, output, shared);
 
         NVSDK_NGX_Result result = NVSDK_NGX_Result_Fail;
-        mDevice.getPool().submitAndWait([&](VkCommandBuffer commands) {
-            result = NGX_VULKAN_CREATE_DLSS_EXT(commands, 1, 1, &mTargets->mFeature, mContext->mParameters, &create);
-        });
+        if (mMode == DlssMode::RayReconstruction)
+        {
+            NVSDK_NGX_DLSSD_Create_Params create{};
+            create.InDenoiseMode = NVSDK_NGX_DLSS_Denoise_Mode_DLUnified;
+            create.InRoughnessMode = NVSDK_NGX_DLSS_Roughness_Mode_Packed;
+            create.InUseHWDepth = NVSDK_NGX_DLSS_Depth_Type_Linear;
+            create.InWidth = render.width;
+            create.InHeight = render.height;
+            create.InTargetWidth = output.width;
+            create.InTargetHeight = output.height;
+            create.InPerfQualityValue = qualityOf(render, output);
+            // Linear view-space depth is positive away from the camera, so `DepthInverted` is off;
+            // HDR, render-resolution unjittered motion vectors, and NGX's own exposure meter hold.
+            create.InFeatureCreateFlags = NVSDK_NGX_DLSS_Feature_Flags_IsHDR | NVSDK_NGX_DLSS_Feature_Flags_MVLowRes
+                | NVSDK_NGX_DLSS_Feature_Flags_AutoExposure;
+            create.InEnableOutputSubrects = false;
+
+            mDevice.getPool().submitAndWait([&](VkCommandBuffer commands) {
+                result = NGX_VULKAN_CREATE_DLSSD_EXT1(
+                    mDevice.getHandle(), commands, 1, 1, &mTargets->mFeature, mContext->mParameters, &create);
+            });
+        }
+        else
+        {
+            NVSDK_NGX_DLSS_Create_Params create{};
+            create.Feature.InWidth = render.width;
+            create.Feature.InHeight = render.height;
+            create.Feature.InTargetWidth = output.width;
+            create.Feature.InTargetHeight = output.height;
+            create.Feature.InPerfQualityValue = qualityOf(render, output);
+
+            // Motion projects the surface at both ends without jitter: a stationary surface has zero
+            // motion even as rayAt samples a different subpixel. Marking it jittered makes NGX subtract
+            // a jitter delta that is not there. Depth is reversed and colour is linear HDR; exposure is
+            // DLSS's own meter, because the renderer's meter runs after the upscaler.
+            create.InFeatureCreateFlags = NVSDK_NGX_DLSS_Feature_Flags_IsHDR | NVSDK_NGX_DLSS_Feature_Flags_MVLowRes
+                | NVSDK_NGX_DLSS_Feature_Flags_DepthInverted | NVSDK_NGX_DLSS_Feature_Flags_AutoExposure;
+            create.InEnableOutputSubrects = false;
+
+            mDevice.getPool().submitAndWait([&](VkCommandBuffer commands) {
+                result
+                    = NGX_VULKAN_CREATE_DLSS_EXT(commands, 1, 1, &mTargets->mFeature, mContext->mParameters, &create);
+            });
+        }
 
         if (NVSDK_NGX_FAILED(result) || mTargets->mFeature == nullptr)
-            throw Unsupported("NVIDIA DLSS could not create its feature at " + std::to_string(render.width) + "x"
-                + std::to_string(render.height) + " to " + std::to_string(output.width) + "x"
-                + std::to_string(output.height) + ": " + resultText(result));
+            throw Unsupported(std::string(modeName(mMode)) + " could not create its feature at "
+                + std::to_string(render.width) + "x" + std::to_string(render.height) + " to "
+                + std::to_string(output.width) + "x" + std::to_string(output.height) + ": " + resultText(result));
 
         mFresh = true;
     }
@@ -297,12 +472,110 @@ namespace Rtx
         Targets& targets = *mTargets;
 
         const bool reset = std::exchange(mFresh, false);
+        const Buffer& block = mContext->mBlocks.at(inputs.mSlot);
+
+        if (mMode == DlssMode::RayReconstruction)
+        {
+            assert(targets.mDiffuseAlbedo.has_value() && targets.mSpecularAlbedo.has_value()
+                && targets.mNormalRoughness.has_value());
+            Image& diffuseAlbedo = *targets.mDiffuseAlbedo;
+            Image& specularAlbedo = *targets.mSpecularAlbedo;
+            Image& normalRoughness = *targets.mNormalRoughness;
+
+            const Shaders::DlssdInputConstants constants{
+                .mEyes = inputs.mEyes,
+                .mFar = inputs.mFar,
+                .mFrame = inputs.mFrame,
+                .mLobed = inputs.mLobed ? 1u : 0u,
+            };
+            block.writeAt(0, std::span(&constants, 1));
+            block.nameForNext();
+
+            {
+                Barriers barriers(commands);
+                targets.mDepth.addTransition(barriers, Use::sUndefined, sInputWrite);
+                targets.mMotion.addTransition(barriers, Use::sUndefined, sInputWrite);
+                diffuseAlbedo.addTransition(barriers, Use::sUndefined, sInputWrite);
+                specularAlbedo.addTransition(barriers, Use::sUndefined, sInputWrite);
+                normalRoughness.addTransition(barriers, Use::sUndefined, sInputWrite);
+                targets.mShared[0].addTransition(barriers, targets.mShared.firstUseOf(0), sDlssWrite);
+                barriers.flush();
+            }
+
+            DescriptorWrites writes(mContext->mInputs);
+            writes.image(Shaders::DLSSD_INPUTS_BIND_SURFACE, inputs.mSurface.describeStorage());
+            writes.image(Shaders::DLSSD_INPUTS_BIND_MOTION, inputs.mMotion.describeStorage());
+            writes.image(Shaders::DLSSD_INPUTS_BIND_ALBEDO, inputs.mAlbedo.describeStorage());
+            writes.image(Shaders::DLSSD_INPUTS_BIND_SPECULAR, inputs.mSpecular.describeStorage());
+            writes.image(Shaders::DLSSD_INPUTS_BIND_SPECULAR_ALBEDO, inputs.mSpecularAlbedo.describeStorage());
+            writes.image(Shaders::DLSSD_INPUTS_BIND_DEPTH, targets.mDepth.describeStorage());
+            writes.image(Shaders::DLSSD_INPUTS_BIND_MOTION_OUT, targets.mMotion.describeStorage());
+            writes.image(Shaders::DLSSD_INPUTS_BIND_DIFFUSE_ALBEDO_OUT, diffuseAlbedo.describeStorage());
+            writes.image(Shaders::DLSSD_INPUTS_BIND_SPECULAR_ALBEDO_OUT, specularAlbedo.describeStorage());
+            writes.image(Shaders::DLSSD_INPUTS_BIND_NORMAL_ROUGHNESS_OUT, normalRoughness.describeStorage());
+            writes.buffer(Shaders::DLSSD_INPUTS_BIND_CONSTANTS, block.describe(0, sizeof(constants)));
+            dispatch(commands, mContext->mInputs, writes, NoConstants{},
+                Groups::covering(targets.mRender.width, targets.mRender.height, Shaders::DLSS_INPUT_WORKGROUP));
+
+            {
+                Barriers barriers(commands);
+                inputs.mColour.addTransition(barriers, Use::sAnyGeneralRead, sDlssRead);
+                targets.mDepth.addTransition(barriers, sInputWrite, sDlssRead);
+                targets.mMotion.addTransition(barriers, sInputWrite, sDlssRead);
+                diffuseAlbedo.addTransition(barriers, sInputWrite, sDlssRead);
+                specularAlbedo.addTransition(barriers, sInputWrite, sDlssRead);
+                normalRoughness.addTransition(barriers, sInputWrite, sDlssRead);
+                barriers.flush();
+            }
+
+            NVSDK_NGX_Resource_VK colour = viewOf(inputs.mColour);
+            NVSDK_NGX_Resource_VK depth = viewOf(targets.mDepth);
+            NVSDK_NGX_Resource_VK motion = viewOf(targets.mMotion);
+            NVSDK_NGX_Resource_VK diffuse = viewOf(diffuseAlbedo);
+            NVSDK_NGX_Resource_VK specular = viewOf(specularAlbedo);
+            NVSDK_NGX_Resource_VK normals = viewOf(normalRoughness);
+            NVSDK_NGX_Resource_VK output = viewOf(targets.mShared[0]);
+
+            std::array<float, 16> worldToView{};
+            std::array<float, 16> viewToClip{};
+            fillDlssdMatrices(inputs, worldToView, viewToClip);
+
+            NVSDK_NGX_VK_DLSSD_Eval_Params evaluation{};
+            evaluation.pInColor = &colour;
+            evaluation.pInOutput = &output;
+            evaluation.pInDepth = &depth;
+            evaluation.pInMotionVectors = &motion;
+            evaluation.pInDiffuseAlbedo = &diffuse;
+            evaluation.pInSpecularAlbedo = &specular;
+            evaluation.pInNormals = &normals;
+            evaluation.pInRoughness = &normals;
+            evaluation.InJitterOffsetX = -inputs.mEyes.mWorld.mJitter.x();
+            evaluation.InJitterOffsetY = -inputs.mEyes.mWorld.mJitter.y();
+            evaluation.InRenderSubrectDimensions
+                = NVSDK_NGX_Dimensions{ .Width = targets.mRender.width, .Height = targets.mRender.height };
+            evaluation.InReset = reset ? 1 : 0;
+            evaluation.InMVScaleX = 1.0f;
+            evaluation.InMVScaleY = 1.0f;
+            evaluation.InPreExposure = 1.0f;
+            evaluation.InExposureScale = 1.0f;
+            evaluation.pInWorldToViewMatrix = worldToView.data();
+            evaluation.pInViewToClipMatrix = viewToClip.data();
+            evaluation.InFrameTimeDeltaInMsec = inputs.mSeconds * 1000.0f;
+
+            const NVSDK_NGX_Result result
+                = NGX_VULKAN_EVALUATE_DLSSD_EXT(commands, targets.mFeature, mContext->mParameters, &evaluation);
+            if (NVSDK_NGX_FAILED(result))
+                throw std::runtime_error(
+                    "NVIDIA DLSS Ray Reconstruction failed to evaluate a frame: " + resultText(result));
+
+            return HandedImage{ .mImage = targets.mShared[0], .mLeftAs = Use::sComputeReadWrite };
+        }
+
         const Shaders::DlssInputConstants constants{
             .mEyes = inputs.mEyes,
             .mNear = FsrFrame::sNear,
             .mFrame = inputs.mFrame,
         };
-        const Buffer& block = mContext->mBlocks.at(inputs.mSlot);
         block.writeAt(0, std::span(&constants, 1));
         block.nameForNext();
 
@@ -370,8 +643,9 @@ namespace Rtx
         return HandedImage{ .mImage = targets.mShared[0], .mLeftAs = Use::sComputeReadWrite };
     }
 
-    std::string_view DlssUpscaler::describe()
+    std::string_view DlssUpscaler::describe(const DlssMode mode)
     {
-        return "DLSS 4.5 (NGX 310.9.16)";
+        return mode == DlssMode::RayReconstruction ? "DLSS Ray Reconstruction 4.5 (NGX 310.9.16)"
+                                                   : "DLSS 4.5 (NGX 310.9.16)";
     }
 }

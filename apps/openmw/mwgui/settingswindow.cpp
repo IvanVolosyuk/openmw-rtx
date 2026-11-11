@@ -129,6 +129,7 @@ namespace
         { Rtx::UpscalerKind::Auto, "#{OMWEngine:RayTracingUpscalerAuto}" },
         { Rtx::UpscalerKind::Fsr, "#{OMWEngine:RayTracingUpscalerFsr}" },
         { Rtx::UpscalerKind::Dlss, "#{OMWEngine:RayTracingUpscalerDlss}" },
+        { Rtx::UpscalerKind::DlssRr, "#{OMWEngine:RayTracingUpscalerDlssRr}" },
     } };
     static_assert(Rtx::followsMenu(sUpscalerLabels, Rtx::sUpscalerMenu));
 

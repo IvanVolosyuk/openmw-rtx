@@ -14,6 +14,7 @@
 #include <apps/components_tests/rtx/support/geometry.hpp>
 #include <apps/components_tests/rtx/support/testcamera.hpp>
 #include <apps/components_tests/rtx/support/testtexture.hpp>
+#include <components/rtx/common/error.hpp>
 #include <components/rtx/common/index.hpp>
 #include <components/rtx/frame/frameoptions.hpp>
 #include <components/rtx/frame/reconstruction.hpp>
@@ -361,6 +362,68 @@ namespace Rtx::Testing
 
             const std::vector<std::uint8_t> first = run();
             EXPECT_EQ(run(), first);
+        }
+
+        /// **DLSS Ray Reconstruction draws a lit, finite frame with the built-in denoisers skipped**
+        /// wherever NGX Ray Reconstruction is built and accepted by the card and driver, and refuses
+        /// cleanly with `Unsupported` everywhere else.
+        TEST_F(RtxVisibilityTest, dlssRayReconstructionDrawsAnUnfilteredFrameWhenAvailable)
+        {
+            constexpr std::uint32_t size = 384;
+            RendererOptions options = describeRenderer(size, size, true);
+            options.mRun.mProfile.mUpscaler = UpscalerKind::DlssRr;
+            options.mRun.mProfile.mUpscale = Upscale::Quality;
+
+            std::unique_ptr<VulkanRenderer> rr;
+            try
+            {
+                rr = std::make_unique<VulkanRenderer>(options);
+            }
+            catch (const Unsupported&)
+            {
+                return;
+            }
+
+            awaitKernels(*rr);
+            forgetErrors(*rr);
+
+            EXPECT_EQ(rr->getProfile().mUpscaler, UpscalerKind::DlssRr);
+            EXPECT_NE(rr->describeDevice().find("DLSS Ray Reconstruction"), std::string::npos);
+
+            const SceneDesc scene = evenFloor();
+            rr->setScene(Rtx::SceneSlot::world(), scene, {});
+            RendererProbe probe(*rr);
+
+            for (const Upscale mode : { Upscale::Quality, Upscale::Native })
+            {
+                SCOPED_TRACE(sUpscaleNames.name(mode));
+                rr->setUpscale(mode);
+                const Shaders::VisibilityConstants camera = overTheFloor(rr->getExtents().mRenderWidth);
+                for (std::uint32_t at = 0; at < 8; ++at)
+                {
+                    Shaders::VisibilityConstants sampled = camera;
+                    sampled.mFrame = at;
+                    probe.traceFrame(sampled,
+                        FrameOptions{ .mSinceLast = 1.0f / 60.0f,
+                            .mLoss = at == 0 ? HistoryLoss::Cut : HistoryLoss::None,
+                            .mExposure = FixedExposure{ 1.0f } });
+                    const std::optional<FrameResult> finished = rr->finishFrame();
+                    ASSERT_TRUE(finished.has_value());
+                    EXPECT_FALSE(finished->mReconstruction.mDenoised);
+                    for (const NotFiniteStores& kernel : finished->mNotFinite.kernels())
+                        ADD_FAILURE() << kernel.mStores << " stores not finite in " << kernel.mKernel;
+                }
+
+                std::vector<std::uint8_t> pixels;
+                rr->readPixels(pixels);
+                ASSERT_EQ(pixels.size(), std::size_t{ size } * size * 4);
+                double sum = 0.0;
+                for (std::size_t i = 0; i < pixels.size(); i += 4)
+                    sum += pixels[i + 1];
+                EXPECT_GT(sum, 0.0);
+            }
+
+            reportErrors(*rr, "DLSS Ray Reconstruction");
         }
     }
 }

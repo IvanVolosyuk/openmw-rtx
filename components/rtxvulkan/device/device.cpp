@@ -133,11 +133,14 @@ namespace Rtx
             mDlssSupported = true;
             dlssExtensions = Dlss::requiredDeviceExtensions(instance.getHandle(), mPhysicalDevice.getHandle());
             const bool queried = Dlss::isSupported(instance.getHandle(), mPhysicalDevice.getHandle());
+            const bool rayReconstruction
+                = Dlss::isRayReconstructionSupported(instance.getHandle(), mPhysicalDevice.getHandle());
 
             std::string named;
             for (const std::string& extension : dlssExtensions)
                 named += (named.empty() ? "" : ", ") + extension;
-            Log(Debug::Info) << "NVIDIA DLSS: trying (feature query " << (queried ? "supported" : "inconclusive") << ')'
+            Log(Debug::Info) << "NVIDIA DLSS: trying (SR query " << (queried ? "supported" : "inconclusive")
+                             << ", RR query " << (rayReconstruction ? "supported" : "inconclusive") << ')'
                              << (named.empty() ? "" : ", NGX asks for " + named);
         }
 
