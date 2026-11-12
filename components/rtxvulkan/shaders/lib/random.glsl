@@ -79,6 +79,37 @@ vec2 unitPairOfRay(uvec2 pixel, uint stream, uint ray)
         turnedTile(blueNoiseAt(tileIndex(pixel, stream + 1u)), step, stream + 1u));
 }
 
+/// `unitPair` on `STREAM_LAMP_DISC` for direct lamp slot `ray` of `rays` (`0 .. rays - 1`). At
+/// `rays == 1u` and `ray == 0u`, both noise modes match `unitPair(pixel, STREAM_LAMP_DISC)`
+/// bit-for-bit; for `rays > 1u`, each lamp slot takes its own step of the turn.
+vec2 unitPairOfLamp(uvec2 pixel, uint ray, uint rays)
+{
+    if (frame.mNoise == NOISE_WHITE_HASH)
+    {
+        uint state = randomSeed(pixelKey(pixel) ^ STREAM_LAMP_DISC * 0x68E31DA4u ^ ray * 0x9E3779B9u);
+        uint next = randomSeed(pixelKey(pixel) ^ (STREAM_LAMP_DISC + 1u) * 0x68E31DA4u ^ ray * 0x9E3779B9u);
+        return vec2(randomNext(state), randomNext(next));
+    }
+
+    const uint step = frame.mFrame * rays + ray;
+    return vec2(turnedTile(blueNoiseAt(tileIndex(pixel, STREAM_LAMP_DISC)), step, STREAM_LAMP_DISC),
+        turnedTile(blueNoiseAt(tileIndex(pixel, STREAM_LAMP_DISC + 1u)), step, STREAM_LAMP_DISC + 1u));
+}
+
+/// A blue-noise scalar in `[0, 1)` for dithering a fractional multi-lamp visibility into the 1-bit
+/// shadow mask when the FidelityFX shadow denoiser filters `CHANNEL_LAMPED`.
+float lampVisibilityDither(uvec2 pixel)
+{
+    if (frame.mNoise == NOISE_WHITE_HASH)
+    {
+        uint state = randomSeed(pixelKey(pixel) ^ 0x51C7A93Du);
+        return randomNext(state);
+    }
+
+    const uint step = frame.mFrame * (MAX_DIRECT_LAMP_RAYS + 1u) + MAX_DIRECT_LAMP_RAYS;
+    return turnedTile(blueNoiseAt(tileIndex(pixel, STREAM_LAMP_DISC)), step, STREAM_LAMP_DISC);
+}
+
 /// A direction inside the cone about `axis` that a source subtends, drawn evenly over its solid angle.
 ///
 /// **This is the whole of what a soft shadow is.** A source with a size is not one direction but a cone of

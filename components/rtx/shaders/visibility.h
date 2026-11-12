@@ -499,12 +499,33 @@ namespace Rtx::Shaders
         /// exposure the host divides this by the scale and leaves mIndirectExposure at zero.
         float mIndirectLimit RTX_ZERO;
 
+        /// How many lamp shadow rays `direct.comp` may trace per pixel, from one to
+        /// `MAX_DIRECT_LAMP_RAYS` (`Rtx::SamplingSwitches::mDirectLampRays`).
+        uint mDirectLampRays RTX_ZERO;
+
+        /// One where `CHANNEL_LAMPED` is read by the 1-bit shadow denoiser
+        /// (`Rtx::Reconstruction::mDenoised`), and nought where `resolve.glsl` reads the channel's
+        /// own light directly (`dlss-rr`, or an unfiltered reference).
+        uint mLampShadowDenoised RTX_ZERO;
+
+        /// Zero-centred exponent offset applied to lamp inverse-square attenuation (`mLampFalloff - 1.0`).
+        /// Nought preserves exact inverse-square falloff; positive values steepen distant hall attenuation.
+        float mLampFalloffOffset RTX_ZERO;
+
+        /// Zero-centred gain offset applied to bounced diffuse and fill indirect light (`mIndirectBrightness - 1.0`).
+        float mIndirectGainOffset RTX_ZERO;
+
+        /// Zero-centred gain offset applied to emissive surface glow at bounce landings (`mEmissiveBounce - 1.0`).
+        float mEmissiveBounceOffset RTX_ZERO;
+
+        uint mLightingPad RTX_ZERO;
+
         /// Where every table a hit reads is. `GpuTables` says why it rides here.
         ///
         /// **After the four-aligned fields, because these addresses are eight-aligned.** Earlier it would
         /// pad the middle of a struct two languages have to agree on, and the offset asserted below
         /// pins where it landed. Everything above it is four-aligned and sums to a multiple of
-        /// eight, including mIndirectLimit.
+        /// eight, including mDirectLampRays and mLampShadowDenoised.
         GpuTables mTables;
 
         /// Previous adapted exposure, read on the GPU; zero means unit/fixed exposure.
@@ -542,8 +563,8 @@ namespace Rtx::Shaders
 
     // Pinned for the reason `scene.h` gives: the side that writes these bytes and the side that
     // reads them are different compilers.
-    static_assert(offsetof(VisibilityConstants, mTables) == 1464, "GpuTables must land eight-aligned");
-    static_assert(sizeof(VisibilityConstants) == 1672, "VisibilityConstants must be scalar-packed on every side");
+    static_assert(offsetof(VisibilityConstants, mTables) == 1488, "GpuTables must land eight-aligned");
+    static_assert(sizeof(VisibilityConstants) == 1696, "VisibilityConstants must be scalar-packed on every side");
     static_assert(sizeof(PuffConstants) == 152, "PuffConstants must be scalar-packed on every side");
 #endif
 

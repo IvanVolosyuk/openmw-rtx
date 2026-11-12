@@ -163,12 +163,13 @@ struct GatherRun
     float mSkyWeight;
 
     /// The lamp the reservoir held, the draw its ray takes on the source (`gatherLampAsk`), what the
-    /// darkening lamps take off, and how far a penumbra on this surface stretches toward the held
-    /// lamp.
+    /// darkening lamps take off, how far a penumbra on this surface stretches toward the held lamp,
+    /// and the sequence state right before weighing lamps for multi-ray direct shading.
     Reservoir mKept;
     vec2 mLampDraw;
     vec3 mDarkening;
     float mLampStretch;
+    uint mLampState;
 
     float mFootprint;
 };
@@ -192,6 +193,7 @@ GatherRun gatherRunOf(uint key, uint lamps, uint path, bool split, bool blue)
     run.mLampDraw = vec2(0.0);
     run.mDarkening = vec3(0.0);
     run.mLampStretch = 1.0;
+    run.mLampState = 0u;
     run.mFootprint = 0.0;
     return run;
 }
@@ -305,21 +307,25 @@ bool startGather(inout GatherRun run, inout SkyPassageRun skyPassage, Surface su
     // **The lobe takes the held lamp's own lobe, kept from the weighing**, and the reservoir's share: the
     // estimate of the lobe over every lamp is then the one the diffuse half makes, with the lobe where the
     // cosine was.
-    Reservoir kept = noLamps();
-    // **Every lamp at a split hit, whose unshadowed sum must be exact, and a fixed count of candidates
-    // everywhere else** (`VisibilityConstants::mLampCandidates`): a path's far end and a pane cost what a
-    // lamp-dense cell costs only where it is seen.
-    weighLamps(kept, state, position, facing, INV_PI, gloss, surface.mLampLit, split ? 0u : frame.mLampCandidates);
-    kept.mFrom = leaving;
-    run.mKept = kept;
-    run.mLampDraw = lampDraw;
+    run.mLampState = state;
+    if (!split || frame.mDirectLampRays <= 1u)
+    {
+        Reservoir kept = noLamps();
+        // **Every lamp at a split hit, whose unshadowed sum must be exact, and a fixed count of candidates
+        // everywhere else** (`VisibilityConstants::mLampCandidates`): a path's far end and a pane cost what a
+        // lamp-dense cell costs only where it is seen.
+        weighLamps(kept, state, position, facing, INV_PI, gloss, surface.mLampLit, split ? 0u : frame.mLampCandidates);
+        kept.mFrom = leaving;
+        run.mKept = kept;
+        run.mLampDraw = lampDraw;
 
-    // **The lamps that take light away take it off the lamps' exact sum and no further**, floored at nought
-    // as the rasterizer clamps its lighting: the sun, the sky and the bounce stay whole.
-    run.mDarkening = darkeningAt(position, facing, INV_PI, surface.mLampLit && kept.mWeight > 0.0);
-    run.mLampStretch = split && kept.mWeight > 0.0
-        ? receiverStretch(planeCosine(facing, normalize(lightAt(kept.mLamp).mPosition - position)))
-        : 1.0;
+        // **The lamps that take light away take it off the lamps' exact sum and no further**, floored at nought
+        // as the rasterizer clamps its lighting: the sun, the sky and the bounce stay whole.
+        run.mDarkening = darkeningAt(position, facing, INV_PI, surface.mLampLit && kept.mWeight > 0.0);
+        run.mLampStretch = split && kept.mWeight > 0.0
+            ? receiverStretch(planeCosine(facing, normalize(lightAt(kept.mLamp).mPosition - position)))
+            : 1.0;
+    }
     run.mFootprint = surface.mFootprint;
     return skyAsked;
 }
@@ -991,6 +997,18 @@ struct SolidLight
     bool mSkyBent;
     float mSkyPath;
     RayAsk mLampRay;
+
+    /// Multi-lamp direct shadow state (`mDirectLampRays > 1u`), held in vector registers rather than
+    /// local arrays so no slot spills across the single ray-query site in `direct.comp`.
+    vec3 mLeaving;
+    vec3 mStep;
+    vec3 mFacingSide;
+    LampSlots8 mLampRows;
+    LampSlots8 mSlotDiffuse;
+    LampSlots8 mSlotSpecular;
+    uvec4 mSlotShares;
+    uint mLampCount;
+    bool mTailDrawn;
 };
 
 /// `surface`'s light before its rays, the solid the eye found at `pixel`.
@@ -999,6 +1017,8 @@ SolidLight solidLightOf(Surface surface, uvec2 pixel)
     // A path the eye sees, which no rate draws (`GatherRun::mPath`).
     GatherRun gather = gatherRunOf(pixelKey(pixel), SEED_LAMPS_EYE, PATH_SEEN, true, true);
     const Gloss gloss = glossOf(surface);
+    const Facing facing = facingOf(surface);
+    const vec3 modulation = specularModulation(gloss);
     SkyPassageRun sky = skyPassageRunOf(
         frame.mSun, vec3(0.0), vec3(0.0), BentPath(0.0, vec3(0.0), 0.0, vec2(0.0)), vec2(0.0), false);
     const bool skyAsked = startGather(gather, sky, surface, gloss, pixel);
@@ -1008,41 +1028,151 @@ SolidLight solidLightOf(Surface surface, uvec2 pixel)
     light.mSkyOverRay = skyAsked ? skyPassageOverAsk(sky) : noRay();
     light.mSkyBent = skyAsked && skyPassageBent(sky);
     light.mSkyPath = sky.mBent.mPath;
-    light.mLampRay = gatherLampAsk(gather, surface);
 
-    // **Split, every lamp's light as though its ray got through, and the held lamp's bit**: Heitz et al.
-    // 2018's ratio estimator, the unshadowed light exact and only its visibility drawn.
-    const Reservoir kept = gather.mKept;
     light.mRest = litSurface(surface, vec3(0.0), vec3(0.0));
     light.mSky = surface.mAlbedo * gather.mSkyDiffuse + gather.mSkySpecular;
-    light.mLamps = surface.mAlbedo * max(kept.mUnshadowed - gather.mDarkening, vec3(0.0));
-
-    light.mLampSpecular = gloss.mGlossy ? kept.mSpecular : vec3(0.0);
-    light.mHeld = heldShare(kept);
-    light.mModulation = specularModulation(gloss);
+    light.mModulation = modulation;
     light.mRoughness = solidLookOf(surface, gloss).mRoughness;
 
     light.mSkySource = gather.mSky;
     light.mSkyStretch = gather.mSkyStretch;
     light.mSkyDrawn = drawnAmong(gather.mSkyCarried, gather.mSkyWeight);
-    // The held lamp's row, read only where one was held: a picture no lamp lights may have no row.
-    light.mLampHeld = kept.mWeight > 0.0;
-    light.mLampRadius = 0.0;
-    light.mLampDistance = 0.0;
-    if (light.mLampHeld)
-    {
-        const GpuLight lamp = lightAt(kept.mLamp);
-        light.mLampRadius = lamp.mSourceRadius;
-        light.mLampDistance = length(lamp.mPosition - kept.mFrom);
-    }
-    light.mLampStretch = gather.mLampStretch;
-    light.mLampDrawn = drawnAmong(kept.mWeight, kept.mTotal);
     light.mFootprint = gather.mFootprint;
+
+    light.mLeaving = surface.mPosition + surface.mLift;
+    light.mStep = stepOf(surface);
+    light.mFacingSide = facing.mSide;
+    light.mLampRows = emptyLampSlots8(NO_LAMP);
+    light.mSlotDiffuse = emptyLampSlots8(0u);
+    light.mSlotSpecular = emptyLampSlots8(0u);
+    light.mSlotShares = uvec4(0u);
+    light.mLampCount = 0u;
+    light.mTailDrawn = false;
+
+    if (frame.mDirectLampRays <= 1u)
+    {
+        light.mLampRay = gatherLampAsk(gather, surface);
+
+        // **Split, every lamp's light as though its ray got through, and the held lamp's bit**: Heitz et al.
+        // 2018's ratio estimator, the unshadowed light exact and only its visibility drawn.
+        const Reservoir kept = gather.mKept;
+        light.mLamps = surface.mAlbedo * max(kept.mUnshadowed - gather.mDarkening, vec3(0.0));
+        light.mLampSpecular = gloss.mGlossy ? kept.mSpecular : vec3(0.0);
+        light.mHeld = heldShare(kept);
+
+        // The held lamp's row, read only where one was held: a picture no lamp lights may have no row.
+        light.mLampHeld = kept.mWeight > 0.0;
+        light.mLampRadius = 0.0;
+        light.mLampDistance = 0.0;
+        if (light.mLampHeld)
+        {
+            const GpuLight lamp = lightAt(kept.mLamp);
+            light.mLampRadius = lamp.mSourceRadius;
+            light.mLampDistance = length(lamp.mPosition - kept.mFrom);
+        }
+        light.mLampStretch = gather.mLampStretch;
+        light.mLampDrawn = drawnAmong(kept.mWeight, kept.mTotal);
+    }
+    else
+    {
+        uint lampState = gather.mLampState;
+        vec3 darkening = vec3(0.0);
+        const DirectLampSet lampSet = weighDirectLamps(surface.mPosition, facing, gloss, surface.mAlbedo, modulation,
+            surface.mLampLit, frame.mDirectLampRays, lampState, darkening);
+        light.mLampRay = noRay();
+        light.mLamps = surface.mAlbedo * max(lampSet.mUnshadowed - darkening, vec3(0.0));
+        light.mLampSpecular = vec3(0.0);
+        light.mHeld = 0.0;
+        light.mLampHeld = lampSet.mCount > 0u;
+        light.mLampRadius = 0.0;
+        light.mLampDistance = 0.0;
+        light.mLampStretch = 1.0;
+        light.mLampDrawn = lampSet.mTailDrawn;
+        light.mLampRows = lampSet.mLamps;
+        light.mSlotDiffuse = lampSet.mDiffuse;
+        light.mSlotSpecular = lampSet.mSpecular;
+        light.mSlotShares = lampSet.mShares;
+        light.mLampCount = lampSet.mCount;
+        light.mTailDrawn = lampSet.mTailDrawn;
+    }
 
     uint passing = randomSeed(gather.mKey + SEED_SHADOW_THROUGH);
     light.mPassing.x = randomNext(passing);
     light.mPassing.y = randomNext(passing);
     return light;
+}
+
+/// Shadow ray for direct lamp slot `slot` (`0 .. lampTurns - 1`) when `mDirectLampRays > 1u`.
+RayAsk directLampAskOf(SolidLight light, uvec2 pixel, uint slot, uint lampTurns)
+{
+    if (slot >= light.mLampCount)
+        return noRay();
+
+    const uint row = slotAt8(light.mLampRows, slot);
+    if (row == NO_LAMP)
+        return noRay();
+
+    const bool tailDrawn = light.mTailDrawn && slot + 1u == light.mLampCount;
+    return lampAskAt(row, light.mLeaving, light.mStep, unitPairOfLamp(pixel, slot, lampTurns), !tailDrawn);
+}
+
+struct MultiLampAccum
+{
+    vec3 mUnshadowedSlots;
+    vec3 mShadowedSlots;
+    vec3 mSpecular;
+    float mLitShare;
+    float mTotalShare;
+    float mOccludedShare;
+    float mWeightedPenumbra;
+    bool mAllOpen;
+    bool mAnyOpen;
+};
+
+MultiLampAccum emptyMultiLampAccum()
+{
+    return MultiLampAccum(vec3(0.0), vec3(0.0), vec3(0.0), 0.0, 0.0, 0.0, 0.0, true, false);
+}
+
+void accumulateDirectLampSlot(inout MultiLampAccum accum, SolidLight light, uint slot, Passage passage)
+{
+    if (slot >= light.mLampCount)
+        return;
+
+    const float through = passage.mOpen * passage.mThrough;
+    const vec3 slotDiffuse = unpackRgb9e5(slotAt8(light.mSlotDiffuse, slot));
+    const vec3 slotSpecular = unpackRgb9e5(slotAt8(light.mSlotSpecular, slot));
+    const float share = max(unpackShare8(light.mSlotShares, slot), 1e-4);
+
+    accum.mUnshadowedSlots += slotDiffuse;
+    accum.mShadowedSlots += slotDiffuse * through;
+    accum.mSpecular += slotSpecular * through;
+    accum.mTotalShare += share;
+    accum.mLitShare += share * through;
+
+    if (through < 1.0)
+        accum.mAllOpen = false;
+    if (through > 0.0)
+        accum.mAnyOpen = true;
+
+    if (passage.mOpen < 1.0 || passage.mThrough < 1.0)
+    {
+        const uint row = slotAt8(light.mLampRows, slot);
+        const GpuLight lamp = lightAt(row);
+        const vec3 offset = lamp.mPosition - light.mLeaving;
+        const float distance = length(offset);
+        const vec3 axis = distance > 0.0 ? offset / distance : vec3(0.0, 0.0, 1.0);
+        const float stretch = receiverStretch(abs(dot(light.mFacingSide, axis)));
+        const float worldRadius = lampPenumbra(lamp.mSourceRadius, distance, passage.mOccluder) * stretch;
+        const bool tailDrawn = light.mTailDrawn && slot + 1u == light.mLampCount;
+        const float slotPenumbra = penumbraIn(tailDrawn || passage.mThrough < 1.0, worldRadius, light.mFootprint);
+        if (slotPenumbra < SHADOW_PENUMBRA_CLEAR)
+        {
+            const float occWeight = share * max(1.0 - through, 1e-3);
+            accum.mOccludedShare += occWeight;
+            accum.mWeightedPenumbra += occWeight * slotPenumbra;
+        }
+    }
 }
 
 /// What a solid sends back once its sky's passage answered `sky` and its lamp's ray `lamp`.
@@ -1070,6 +1200,58 @@ SeenSolid seenSolidOf(SolidLight light, Passage sky, Passage lamp)
         Shadowed(light.mLamps, lamp.mOpen * (lampPassed ? 1.0 : 0.0),
             penumbraIn(light.mLampDrawn || lamp.mThrough < 1.0, lampRadius, light.mFootprint)));
     seen.mSpecular = light.mLampSpecular * (light.mHeld * (lamp.mOpen * lamp.mThrough)) / light.mModulation;
+    seen.mRoughness = light.mRoughness;
+    return seen;
+}
+
+SeenSolid seenSolidMultiLampOf(SolidLight light, Passage sky, MultiLampAccum lamps, uvec2 pixel)
+{
+    const bool skyPassed = light.mPassing.x < sky.mThrough;
+    const float skyRadius = skyPenumbra(light.mSkySource, sky.mOccluder) * light.mSkyStretch;
+    const Shadowed skyShadowed = Shadowed(light.mSky, sky.mOpen * (skyPassed ? 1.0 : 0.0),
+        penumbraIn(light.mSkyDrawn || sky.mThrough < 1.0, skyRadius, light.mFootprint));
+
+    Shadowed lampShadowed = Shadowed(light.mLamps, 1.0, SHADOW_PENUMBRA_CLEAR);
+    if (light.mLampCount > 0u && !lamps.mAllOpen)
+    {
+        const float penumbra
+            = lamps.mOccludedShare > 0.0 ? lamps.mWeightedPenumbra / lamps.mOccludedShare : SHADOW_PENUMBRA_CLEAR;
+        if (frame.mLampShadowDenoised == 0u)
+        {
+            // Unfiltered / DLSS Ray Reconstruction: write exact per-lamp shadowed RGB directly with
+            // zero cross-lamp 0/1 visibility stipple.
+            lampShadowed = Shadowed(
+                lamps.mAnyOpen ? lamps.mShadowedSlots : vec3(0.0), lamps.mAnyOpen ? 1.0 : 0.0, penumbra);
+        }
+        else if (!lamps.mAnyOpen)
+        {
+            // Umbra: keep unshadowed receiver luminance for `shadowmask.comp` with closed bit.
+            lampShadowed = Shadowed(light.mLamps, 0.0, penumbra);
+        }
+        else
+        {
+            const float lumSlotsU = dot(lamps.mUnshadowedSlots, LUMINANCE_WEIGHTS);
+            const float lumSlotsS = dot(lamps.mShadowedSlots, LUMINANCE_WEIGHTS);
+            const float lumExactU = dot(light.mLamps, LUMINANCE_WEIGHTS);
+            const float vFrac = lumSlotsU > 0.0
+                ? clamp(lumSlotsS / lumSlotsU, 0.0, 1.0)
+                : clamp(lamps.mLitShare / max(lamps.mTotalShare, 1e-6), 0.0, 1.0);
+            const vec3 tinted = (vFrac > 1e-3 && lumSlotsS > 0.0)
+                ? min(lamps.mShadowedSlots * (lumExactU / lumSlotsS), vec3(RGB9E5_LARGEST))
+                : light.mLamps;
+            const float openBit = vFrac >= 1.0
+                ? 1.0
+                : (vFrac <= 0.0 ? 0.0 : (lampVisibilityDither(pixel) < vFrac ? 1.0 : 0.0));
+            const float partialPenumbra
+                = (vFrac > 0.0 && vFrac < 1.0) ? (penumbra < SHADOW_PENUMBRA_CLEAR ? max(penumbra, 2.0) : 2.0)
+                                               : penumbra;
+            lampShadowed = Shadowed(tinted, openBit, partialPenumbra);
+        }
+    }
+
+    SeenSolid seen;
+    seen.mLight = SplitLight(light.mRest, skyShadowed, lampShadowed);
+    seen.mSpecular = lamps.mSpecular;
     seen.mRoughness = light.mRoughness;
     return seen;
 }
@@ -1231,6 +1413,8 @@ LandingLight landingLightOf(Surface landing, bool lobe, uvec2 pixel, vec3 weight
 
     LandingLight light;
     light.mGlow = weight * litSurface(landing, vec3(0.0), vec3(0.0));
+    if (frame.mEmissiveBounceOffset != 0.0)
+        light.mGlow *= max(1.0 + frame.mEmissiveBounceOffset, 0.0);
     light.mFill = weight * end.mFill;
     light.mSky = weight * (landing.mAlbedo * end.mSkyDiffuse + end.mSkySpecular);
     light.mLamp = weight * (landing.mAlbedo * end.mLampDiffuse + end.mLampSpecular);

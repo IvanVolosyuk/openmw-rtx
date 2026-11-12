@@ -102,8 +102,15 @@ namespace Rtx
         /// The model path `record` names, as `readModel` files it — empty where it names none.
         const VFS::Path::Normalized& modelPathOf(const ESM::RefId& record);
 
-        /// Where the light of a lamp record stands in its reference's own space — `anchorIn`.
-        osg::Vec3f anchorOf(const ESM::RefId& lamp);
+        struct LampModelInfo
+        {
+            osg::Vec3f mAnchor;
+            bool mEmpty = true;
+        };
+
+        /// Where the light of a lamp record stands in its reference's own space (`anchorIn`) and
+        /// whether its model carries no geometry or particles (`SceneUtil::LightSource::getEmpty`).
+        LampModelInfo lampModelOf(const ESM::RefId& lamp);
 
         /// The model at `path`, read whole where this holds none under that path. Null where
         /// nothing stands for the path. Refused, with no part and `PreparedModel::mRefused` saying
@@ -177,9 +184,9 @@ namespace Rtx
         /// strings, which every static reference of every cell read would otherwise pay.
         boost::container::flat_map<ESM::RefId, VFS::Path::Normalized> mModelPaths;
 
-        /// Where each lamp record's light stands, found the first time a reference to it is met
-        /// and kept for the same reason: apart from the model's reading, because the light is
-        /// carried whether or not the statics are read.
-        boost::container::flat_map<ESM::RefId, osg::Vec3f> mAnchors;
+        /// Where each lamp record's light stands and whether its model is empty, found the first time
+        /// a reference to it is met and kept for the same reason: apart from the model's reading,
+        /// because the light is carried whether or not the statics are read.
+        boost::container::flat_map<ESM::RefId, LampModelInfo> mLampModels;
     };
 }

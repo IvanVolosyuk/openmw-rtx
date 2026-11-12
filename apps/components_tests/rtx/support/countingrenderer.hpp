@@ -107,6 +107,11 @@ namespace Rtx::Testing
         void setBounceRays(std::uint32_t) override {}
         void setAntiFirefly(bool) override {}
         void setIndirectLimit(float) override {}
+        void setDirectLampRays(std::uint32_t) override {}
+        void setShadowFloor(float) override {}
+        void setLampFalloff(float) override {}
+        void setIndirectBrightness(float) override {}
+        void setEmissiveBounce(float) override {}
         Rtx::JobProgress awaitKernels(Rtx::KernelSet, std::chrono::milliseconds) override { return {}; }
         Rtx::FrameExtents getExtents() const override { return mExtents; }
         Rtx::FrameTraced renderFrame(const Rtx::FrameRequest&) override

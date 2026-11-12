@@ -127,7 +127,7 @@ namespace Rtx
         return SkyBudget{ .mMean = carried + fill, .mFill = fill };
     }
 
-    Skylight makeSkylight(const SkyReading& sky)
+    Skylight makeSkylight(const SkyReading& sky, const float ambientScale)
     {
         const osg::Vec3f irradiance = sky.mSunColour * Shaders::DAYLIGHT;
         const float share = std::clamp(sky.mSunShare, 0.0f, 1.0f);
@@ -139,13 +139,15 @@ namespace Rtx
         // moonlight, spread as an ambient it came to six times the night ambient the weather
         // records, and this renderer traces the moons.
         const float dusk = 2.0f * share * (1.0f - share);
+        const osg::Vec3f duskSpread = irradiance * (dusk * Shaders::INV_FOUR_PI);
+        const osg::Vec3f nominalAmbient = sky.mAmbient + duskSpread;
 
         Skylight light{
             .mSun = sunAbove(sky, share),
             .mSunAloft = sunAbove(sky, sky.mSunShareAloft),
-            .mAmbient = sky.mAmbient + irradiance * (dusk * Shaders::INV_FOUR_PI),
+            .mAmbient = sky.mAmbient * ambientScale + duskSpread,
         };
-        light.mSurfaceAmbient = light.mAmbient;
+        light.mSurfaceAmbient = nominalAmbient * ambientScale;
         light.mWaterAmbient = light.mAmbient;
 
         // **The day's gain is adapted to in full.** A frame the gain lifts meters `gain` brighter
@@ -154,7 +156,7 @@ namespace Rtx
         // falls under it. The hour's own bias is measured on the unlifted terms, after both,
         // because it measures what they come to between them.
         light.mDaylightGain = std::pow(Shaders::DAYLIGHT_GAIN, share);
-        light.mExposureBias = exposureBias(light.mSun.mIrradiance, light.mAmbient)
+        light.mExposureBias = exposureBias(light.mSun.mIrradiance, nominalAmbient)
             * std::pow(light.mDaylightGain, Shaders::EXPOSURE_ADAPTATION - 1.0f)
             * std::exp2(Shaders::EXPOSURE_LIT_STOPS * share);
 
@@ -205,9 +207,9 @@ namespace Rtx
         return std::max(sunShareAt(hour - offset, times), sunShareAt(hour + offset, times));
     }
 
-    Daylight makeRoomLight(const ESM::Cell::AMBIstruct& room)
+    Daylight makeRoomLight(const ESM::Cell::AMBIstruct& room, const float ambientScale)
     {
-        const osg::Vec3f haze = decodeColour(room.mFog);
+        const osg::Vec3f haze = decodeColour(room.mFog) * ambientScale;
         const osg::Vec3f fill = decodeColour(room.mAmbient);
 
         // The record's sunlight, put where light with no direction belongs, by the factor
@@ -215,9 +217,9 @@ namespace Rtx
         const osg::Vec3f spread = decodeColour(room.mSunlight) * (Shaders::DAYLIGHT * Shaders::INV_FOUR_PI);
 
         return Daylight{
-            .mLight = Skylight{ .mAmbient = fill * sRoomFillBounced + spread * sRoomSpreadBounced,
-                .mSurfaceAmbient = (fill + spread) * sRoomAmbientUnbounced,
-                .mWaterAmbient = (fill + spread) * sRoomWaterAmbient,
+            .mLight = Skylight{ .mAmbient = (fill * sRoomFillBounced + spread * sRoomSpreadBounced) * ambientScale,
+                .mSurfaceAmbient = (fill + spread) * (sRoomAmbientUnbounced * ambientScale),
+                .mWaterAmbient = (fill + spread) * (sRoomWaterAmbient * ambientScale),
                 .mExposureBias = std::exp2(Shaders::EXPOSURE_LIT_STOPS) },
             .mSkyHorizon = haze,
             .mSkyZenith = haze,

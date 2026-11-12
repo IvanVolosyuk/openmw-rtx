@@ -226,13 +226,24 @@ namespace Rtx
 
         Misc::Result<std::optional<Light>, std::string_view> animateLight(
             Misc::Result<std::optional<Light>, std::string_view> made, const LampVariation& variation,
-            const LampSettings& settings)
+            const LampSettings& settings, const bool empty)
         {
             if (made.isOk() && made.value().has_value())
             {
                 Light& light = *made.value();
                 light.mPosition += variation.mOffset * light.mSourceRadius;
+                light.mReach *= settings.mReachScale;
                 light.mSourceRadius *= variation.mSourceScale * settings.mSourceScale;
+                if (empty)
+                {
+                    if (settings.mEmptyBrightness <= 0.0f)
+                    {
+                        made.value().reset();
+                        return made;
+                    }
+                    light.mIntensity *= settings.mEmptyBrightness;
+                    light.mSourceRadius *= settings.mEmptySourceScale;
+                }
             }
             return made;
         }
@@ -388,7 +399,7 @@ namespace Rtx
         mBall.expandBy(osg::BoundingSpheref(emitter.mCentre, emitter.mReach));
     }
 
-    Misc::Result<std::optional<Light>, std::string_view> Glow::makeLight() const
+    Misc::Result<std::optional<Light>, std::string_view> Glow::makeLight(const LampSettings& settings) const
     {
         // An effect of nothing, or of a point, glows nothing; a ball that is not a number is not
         // `valid` either, and goes on to be refused with the rest of what is not finite.
@@ -409,8 +420,8 @@ namespace Rtx
         return finiteOnly(Light{
             .mPosition = mBall.center(),
             .mIntensity = intensity * sGlowGain,
-            .mReach = radius * sGlowReachScale,
-            .mSourceRadius = radius,
+            .mReach = radius * sGlowReachScale * settings.mReachScale,
+            .mSourceRadius = radius * std::max(settings.mSourceScale, 1e-3f),
             .mClearance = radius,
             .mTraits = Shaders::lightTraits(true, mClasses),
         });
@@ -433,9 +444,9 @@ namespace Rtx
         const LampVariation variation = variationAt(type, source.getId(), simulationTime, settings, source.isFire());
         const osg::Vec3f colour = colourAtBrightness(source, variation.mBrightness);
         const float radius = source.getSourceRadius();
-        return animateLight(
-            isSpellLight(source) ? makeSpellLight(colour, radius, position) : makeLight(colour, radius, position),
-            variation, settings);
+        const bool spell = isSpellLight(source);
+        return animateLight(spell ? makeSpellLight(colour, radius, position) : makeLight(colour, radius, position),
+            variation, settings, source.getEmpty() && !spell);
     }
 
     bool castsWherePlaced(const SceneUtil::LightCommon& record)
@@ -459,7 +470,8 @@ namespace Rtx
     }
 
     Misc::Result<std::optional<Light>, std::string_view> makeLight(const SceneUtil::LightCommon& record,
-        const osg::Vec3f& position, const double simulationTime, const int id, const LampSettings& settings)
+        const osg::Vec3f& position, const double simulationTime, const int id, const LampSettings& settings,
+        const bool empty)
     {
         if (!castsWherePlaced(record))
             return std::nullopt;
@@ -476,6 +488,6 @@ namespace Rtx
 
         return animateLight(
             makeLight((record.mNegative ? -recorded : recorded) * variation.mBrightness, radius, position), variation,
-            settings);
+            settings, empty);
     }
 }

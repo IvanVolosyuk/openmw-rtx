@@ -403,6 +403,30 @@ namespace Rtx
             EXPECT_EQ(bare.mLight.mSun.mIrradiance, osg::Vec3f(0.0f, 0.0f, 0.0f));
             EXPECT_EQ(bare.mLight.mAmbient, osg::Vec3f(0.0f, 0.0f, 0.0f));
             EXPECT_FLOAT_EQ(bare.mFog.mExtinction, 0.0f);
+
+            // Turning ambient brightness to zero removes every record ambient term and unshadowed
+            // ambient haze colour from rooms and outdoor nights alike while keeping room fog
+            // extinction (for shadowed volumetric lamp shafts) and night exposure bias intact.
+            const Daylight darkRoom = makeRoomLight(chamber, 0.0f);
+            EXPECT_EQ(darkRoom.mLight.mAmbient, osg::Vec3f(0.0f, 0.0f, 0.0f));
+            EXPECT_EQ(darkRoom.mLight.mSurfaceAmbient, osg::Vec3f(0.0f, 0.0f, 0.0f));
+            EXPECT_EQ(darkRoom.mLight.mWaterAmbient, osg::Vec3f(0.0f, 0.0f, 0.0f));
+            EXPECT_EQ(darkRoom.mSkyHorizon, osg::Vec3f(0.0f, 0.0f, 0.0f));
+            EXPECT_EQ(darkRoom.mSkyZenith, osg::Vec3f(0.0f, 0.0f, 0.0f));
+            EXPECT_EQ(darkRoom.mFog.mColour, osg::Vec3f(0.0f, 0.0f, 0.0f));
+            EXPECT_FLOAT_EQ(darkRoom.mFog.mExtinction, room.mFog.mExtinction);
+            EXPECT_FLOAT_EQ(darkRoom.mLight.mExposureBias, room.mLight.mExposureBias);
+
+            const osg::Vec3f nightRecord(0.0168f, 0.0168f, 0.0168f);
+            const Skylight nightDefault
+                = makeSkylight(SkyReading{ .mSunPosition = osg::Vec3f(0.0f, 0.0f, 1.0f), .mAmbient = nightRecord }, 1.0f);
+            const Skylight nightNoAmbient
+                = makeSkylight(SkyReading{ .mSunPosition = osg::Vec3f(0.0f, 0.0f, 1.0f), .mAmbient = nightRecord }, 0.0f);
+            EXPECT_EQ(nightNoAmbient.mAmbient, osg::Vec3f(0.0f, 0.0f, 0.0f));
+            EXPECT_EQ(nightNoAmbient.mSurfaceAmbient, osg::Vec3f(0.0f, 0.0f, 0.0f));
+            EXPECT_EQ(nightNoAmbient.mWaterAmbient, osg::Vec3f(0.0f, 0.0f, 0.0f));
+            EXPECT_FLOAT_EQ(nightNoAmbient.mExposureBias, nightDefault.mExposureBias);
+            EXPECT_GT(nightNoAmbient.mExposureBias, 0.0f);
         }
     }
 }

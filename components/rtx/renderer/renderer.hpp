@@ -522,6 +522,11 @@ namespace Rtx
         /// Selects the existing outlier-suppression pass for subsequent frames, without rebuilding targets.
         virtual void setAntiFirefly(bool enabled) = 0;
         virtual void setIndirectLimit(float multiple) = 0;
+        virtual void setDirectLampRays(std::uint32_t rays) = 0;
+        virtual void setShadowFloor(float floor) = 0;
+        virtual void setLampFalloff(float falloff) = 0;
+        virtual void setIndirectBrightness(float brightness) = 0;
+        virtual void setEmissiveBounce(float bounce) = 0;
 
         /// How many of `set`'s kernels are made, waiting `patience` at most for the rest, and
         /// rethrowing what making one threw. The renderer starts making them as it is made, on

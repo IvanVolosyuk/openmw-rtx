@@ -60,6 +60,14 @@ namespace Rtx
             && "a count of bounce rays its asker should have held from one to `MAX_BOUNCE_RAYS`");
         sampled.mBounceRays = reconstruction.mSampling.mIndirect ? reconstruction.mSampling.mBounceRays : 0u;
         sampled.mIndirectLimit = reconstruction.mSampling.mIndirectLimit;
+        assert(reconstruction.mSampling.mDirectLampRays >= 1
+            && reconstruction.mSampling.mDirectLampRays <= Shaders::MAX_DIRECT_LAMP_RAYS
+            && "a count of direct lamp rays its asker should have held from one to `MAX_DIRECT_LAMP_RAYS`");
+        sampled.mDirectLampRays = reconstruction.mSampling.mDirectLampRays;
+        sampled.mLampShadowDenoised = reconstruction.mDenoised ? 1u : 0u;
+        sampled.mLampFalloffOffset = reconstruction.mSampling.mLampFalloff - 1.0f;
+        sampled.mIndirectGainOffset = reconstruction.mSampling.mIndirectBrightness - 1.0f;
+        sampled.mEmissiveBounceOffset = reconstruction.mSampling.mEmissiveBounce - 1.0f;
         sampled.mIndirectExposure = 0;
 
         // The sampler takes the setting as it is: the settings clamp it to sixteen, and a device

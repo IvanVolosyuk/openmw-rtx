@@ -267,6 +267,8 @@ namespace MWGui
 
         // One ray to a step, up to the most the trace keeps a landing's list for
         getWidget(mRayTracingIndirectLimit, "RayTracingIndirectLimitSlider");
+        getWidget(mRayTracingIndirectBrightness, "RayTracingIndirectBrightnessSlider");
+        getWidget(mRayTracingEmissiveBounce, "RayTracingEmissiveBounceSlider");
         getWidget(mRayTracingAntiFirefly, "RayTracingAntiFireflyRow");
         getWidget(mRayTracingBounceRays, "RayTracingBounceRaysSlider");
         constexpr int mostRays = Settings::RTXCategory::sMaxBounceRays;
@@ -274,9 +276,16 @@ namespace MWGui
         mRayTracingBounceRays->setUserString("SettingMax", MyGUI::utility::toString(mostRays));
         mRayTracingBounceRays->setScrollRange(static_cast<std::size_t>(mostRays));
 
+        MyGUI::ScrollBar* directLampRays;
+        getWidget(directLampRays, "RayTracingDirectLampRaysSlider");
+        constexpr int mostLampRays = Settings::RTXCategory::sMaxDirectLampRays;
+        directLampRays->setUserString("SettingMin", "1");
+        directLampRays->setUserString("SettingMax", MyGUI::utility::toString(mostLampRays));
+        directLampRays->setScrollRange(static_cast<std::size_t>(mostLampRays));
+
         MyGUI::ScrollView* rayTracingScroll;
         getWidget(rayTracingScroll, "RayTracingScroll");
-        rayTracingScroll->setCanvasSize(420, 726);
+        rayTracingScroll->setCanvasSize(420, 1158);
         rayTracingScroll->setVisibleHScroll(false);
         configureWidgets(mMainWidget, true);
 
@@ -802,6 +811,12 @@ namespace MWGui
         mRayTracingIndirectLimit->setEnabled(traced);
         mRayTracingIndirectLimit->setAlpha(traced ? 1.0f : 0.5f);
         getSliderLabel(mRayTracingIndirectLimit)->setAlpha(traced ? 1.0f : 0.5f);
+        mRayTracingIndirectBrightness->setEnabled(traced);
+        mRayTracingIndirectBrightness->setAlpha(traced ? 1.0f : 0.5f);
+        getSliderLabel(mRayTracingIndirectBrightness)->setAlpha(traced ? 1.0f : 0.5f);
+        mRayTracingEmissiveBounce->setEnabled(traced);
+        mRayTracingEmissiveBounce->setAlpha(traced ? 1.0f : 0.5f);
+        getSliderLabel(mRayTracingEmissiveBounce)->setAlpha(traced ? 1.0f : 0.5f);
         mRayTracingAntiFirefly->setEnabled(traced);
         mRayTracingAntiFirefly->setAlpha(traced ? 1.0f : 0.5f);
         mRayTracingBounceRays->setEnabled(traced);

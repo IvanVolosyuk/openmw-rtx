@@ -439,6 +439,10 @@ namespace Rtx::Testing
         /// names another.
         std::uint32_t mBounceRays = 1;
         float mIndirectLimit = 0.0f;
+        std::uint32_t mDirectLampRays = 1;
+        float mLampFalloff = 1.0f;
+        float mIndirectBrightness = 1.0f;
+        float mEmissiveBounce = 1.0f;
 
         /// Where the trace draws from: the tile every figure over this fixture was derived against,
         /// unless a test names the other.
@@ -549,6 +553,7 @@ namespace Rtx::Testing
         {
             // Before the size, so a move across one ray and a new size make the targets once.
             mRenderer.setBounceRays(shot.mBounceRays);
+            mRenderer.setDirectLampRays(shot.mDirectLampRays);
             mRenderer.resize(size, size);
             mProbe.setSea(shot.mSea);
             mRenderer.setAnisotropy(shot.mAnisotropy);
@@ -593,7 +598,11 @@ namespace Rtx::Testing
                                 .mLampCandidates = shot.mLampCandidates,
                                 .mIndirect = shot.mIndirect,
                                 .mBounceRays = shot.mBounceRays,
-                                .mIndirectLimit = shot.mIndirectLimit },
+                                .mIndirectLimit = shot.mIndirectLimit,
+                                .mDirectLampRays = shot.mDirectLampRays,
+                                .mLampFalloff = shot.mLampFalloff,
+                                .mIndirectBrightness = shot.mIndirectBrightness,
+                                .mEmissiveBounce = shot.mEmissiveBounce },
                             .mFilters = { .mAntilag = shot.mAntilag } },
                         .mExposure = shot.mExposure.has_value() ? ExposureRule(FixedExposure{ *shot.mExposure })
                                                                 : ExposureRule(MeasuredExposure{}),

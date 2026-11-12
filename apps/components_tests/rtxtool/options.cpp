@@ -117,6 +117,7 @@ namespace RtxTool
                 { "indirect", "false" },
                 { "indirect-limit", "4" },
                 { "bounce-rays", "16" },
+                { "direct-lamp-rays", "4" },
                 { "antilag", "false" },
                 { "history-fix", "false" },
                 { "dual-motion", "false" },
@@ -136,6 +137,8 @@ namespace RtxTool
             EXPECT_THROW(options.versus(played, "antifirefly=maybe"), std::runtime_error);
             EXPECT_THROW(options.versus(played, "bounce-rays=0"), std::runtime_error) << "no bounce is `indirect`'s";
             EXPECT_THROW(options.versus(played, "bounce-rays=17"), std::runtime_error) << "past the landing's heads";
+            EXPECT_THROW(options.versus(played, "direct-lamp-rays=0"), std::runtime_error);
+            EXPECT_THROW(options.versus(played, "direct-lamp-rays=9"), std::runtime_error);
             EXPECT_THROW(options.versus(played, "shadow-floor=0.5"), std::runtime_error)
                 << "a floor over a quarter, which can leave a pixel nothing to draw";
         }

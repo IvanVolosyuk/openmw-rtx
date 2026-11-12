@@ -71,6 +71,11 @@ namespace Rtx
         void setBounceRays(std::uint32_t rays) override;
         void setAntiFirefly(bool enabled) override;
         void setIndirectLimit(float multiple) override;
+        void setDirectLampRays(std::uint32_t rays) override;
+        void setShadowFloor(float floor) override;
+        void setLampFalloff(float falloff) override;
+        void setIndirectBrightness(float brightness) override;
+        void setEmissiveBounce(float bounce) override;
         JobProgress awaitKernels(KernelSet, std::chrono::milliseconds) override { return {}; }
         FrameTraced renderFrame(const FrameRequest& request) override;
         void holdAir(const AirClock&) override {}

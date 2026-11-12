@@ -15,6 +15,7 @@
 #include "bindings.glsl"
 #include "gloss.glsl"
 #include "random.glsl"
+#include "sharedexponent.glsl"
 #include "traversal.glsl"
 #include "variants.glsl"
 
@@ -143,6 +144,9 @@ float lampSoftening(float source)
     return max(source, 1.0);
 }
 
+const float LAMP_FALLOFF_ANCHOR_SQ = 112.0 * 112.0 + 40.0 * 40.0;
+const float LAMP_FALLOFF_CORE_SQ = 40.0 * 40.0;
+
 /// How much of a light `distance` away arrives, per unit intensity.
 float falloff(float distance, float reach, float source)
 {
@@ -150,7 +154,10 @@ float falloff(float distance, float reach, float source)
     const float window = clamp(1.0 - ratio * ratio * ratio * ratio, 0.0, 1.0);
     const float held = lampSoftening(source);
 
-    return window * window / (distance * distance + held * held);
+    float base = window * window / (distance * distance + held * held);
+    if (frame.mLampFalloffOffset != 0.0)
+        base *= pow(LAMP_FALLOFF_ANCHOR_SQ / (distance * distance + LAMP_FALLOFF_CORE_SQ), frame.mLampFalloffOffset);
+    return base;
 }
 
 /// The integral of `falloff` along a ray, over the stretch of it between `from` and `to`.
@@ -197,7 +204,14 @@ float falloffAlong(float perpendicular, float from, float to, float reach, float
         + rest * atan(high / root) / root;
 
     // The substitution measured `s` in reaches, and `dt` carries the reach back out.
-    return (above - below) / reach;
+    float integral = (above - below) / reach;
+    if (frame.mLampFalloffOffset != 0.0)
+    {
+        const float mid = 0.5 * (from + to);
+        const float midDistSq = perpendicular * perpendicular + mid * mid;
+        integral *= pow(LAMP_FALLOFF_ANCHOR_SQ / (midDistSq + LAMP_FALLOFF_CORE_SQ), frame.mLampFalloffOffset);
+    }
+    return integral;
 }
 
 /// One lamp as it arrives at a point.
@@ -513,6 +527,30 @@ GpuLight shownLightAt(uint row)
     return held;
 }
 
+/// Evaluates one lamp's unshadowed diffuse, specular lobe, Fresnel share and importance weight at `from`.
+LightCandidate lampCandidateAt(GpuLight held, vec3 from, Facing facing, bool sided, float scale, Gloss gloss)
+{
+    const Lamp lamp = lampAt(held, from);
+
+    // **Inside a fill's ball the cosine to the centre is blended out**, by how deep the point stands,
+    // because the ball glows on every side of it there.
+    //
+    // **And no test on the reach or the cosine before the offer.** A lamp out of reach carries no
+    // direction and no share, so its weight below is nought, and `considerLamp` refuses a weight of
+    // nought; two branches inside a loop of up to `LAMPS_AT_A_POINT` saved one dot and one luminance
+    // apiece. The depth is selected and not divided for such a lamp, whose distance is nought over a
+    // source that may be a point.
+    const float faced = sided ? litCosine(facing, lamp.mTowards) : 1.0;
+    const float depth = lamp.mReaching > 0.0
+        ? lightFill(held.mTraits) * clamp(1.0 - lamp.mDistance / held.mSourceRadius, 0.0, 1.0)
+        : 0.0;
+    const float cosine = mix(faced, 1.0, depth);
+    const vec3 unshadowed = held.mIntensity * (cosine * lamp.mReaching * scale);
+    return surfaceCandidate(unshadowed, dot(unshadowed, LUMINANCE_WEIGHTS), held.mIntensity * lamp.mReaching,
+        lamp.mTowards,
+        held.mSourceRadius > 0.0 ? held.mSourceRadius / max(lamp.mDistance, held.mSourceRadius) : 0.0, gloss, facing);
+}
+
 /// Weighs every lamp reaching `from` into `kept`, or `candidates` of them drawn from the cell.
 ///
 /// **The surface's walk of the grid, about a point.** The air's — `lampsInAir` — walks the same grid along
@@ -546,26 +584,7 @@ void weighLamps(inout Reservoir kept, inout uint state, vec3 from, Facing facing
         const uint i = near.x + (sampled ? min(uint(randomNext(state) * float(count)), count - 1u) : step);
         const uint row = lightListAt(i);
         const GpuLight held = shownLightAt(row);
-        const Lamp lamp = lampAt(held, from);
-
-        // **Inside a fill's ball the cosine to the centre is blended out**, by how deep the point stands,
-        // because the ball glows on every side of it there.
-        //
-        // **And no test on the reach or the cosine before the offer.** A lamp out of reach carries no
-        // direction and no share, so its weight below is nought, and `considerLamp` refuses a weight of
-        // nought; two branches inside a loop of up to `LAMPS_AT_A_POINT` saved one dot and one luminance
-        // apiece. The depth is selected and not divided for such a lamp, whose distance is nought over a
-        // source that may be a point.
-        const float faced = sided ? litCosine(facing, lamp.mTowards) : 1.0;
-        const float depth = lamp.mReaching > 0.0
-            ? lightFill(held.mTraits) * clamp(1.0 - lamp.mDistance / held.mSourceRadius, 0.0, 1.0)
-            : 0.0;
-        const float cosine = mix(faced, 1.0, depth);
-        const vec3 unshadowed = held.mIntensity * (cosine * lamp.mReaching * scale);
-        const LightCandidate candidate = surfaceCandidate(unshadowed, dot(unshadowed, LUMINANCE_WEIGHTS),
-            held.mIntensity * lamp.mReaching, lamp.mTowards,
-            held.mSourceRadius > 0.0 ? held.mSourceRadius / max(lamp.mDistance, held.mSourceRadius) : 0.0, gloss,
-            facing);
+        const LightCandidate candidate = lampCandidateAt(held, from, facing, sided, scale, gloss);
 
         kept.mUnshadowed += candidate.mRadiance * (1.0 - candidate.mFresnel);
         considerLamp(kept, state, candidate, row);
@@ -612,13 +631,13 @@ vec3 darkeningAt(vec3 from, Facing facing, float scale, bool lampLit)
 ///
 /// @param step the step off the triangle the reservoir's point stands on (`stepOf`), or nought for a
 ///        point in the air.
-RayAsk lampAsk(Reservoir kept, vec3 step, vec2 draw, bool nearest)
+RayAsk lampAskAt(uint lampRow, vec3 from, vec3 step, vec2 draw, bool nearest)
 {
     // Aimed from where the ray leaves and not from where the lamp was weighed, with no reach test:
     // a caller that moved its origin after weighing — a lifted surface and the air both do — still
     // aims at the lamp it held.
-    const GpuLight lamp = lightAt(kept.mLamp);
-    const vec3 offset = lamp.mPosition - kept.mFrom;
+    const GpuLight lamp = lightAt(lampRow);
+    const vec3 offset = lamp.mPosition - from;
     const float distance = length(offset);
     if (!(distance > 0.0))
         return noRay();
@@ -631,7 +650,12 @@ RayAsk lampAsk(Reservoir kept, vec3 step, vec2 draw, bool nearest)
     const float along = distance * dot(towards, axis);
 
     return lampLightAsk(
-        leaveSurface(kept.mFrom, step, towards), towards, along - max(lamp.mClearance, SHADOW_BIAS), nearest);
+        leaveSurface(from, step, towards), towards, along - max(lamp.mClearance, SHADOW_BIAS), nearest);
+}
+
+RayAsk lampAsk(Reservoir kept, vec3 step, vec2 draw, bool nearest)
+{
+    return lampAskAt(kept.mLamp, kept.mFrom, step, draw, nearest);
 }
 
 /// How wide the penumbra stands where a ray to a source was stopped `occluder` along it, as its radius in
@@ -661,6 +685,262 @@ float lampVisible(Reservoir kept, vec3 step, vec2 draw)
 float heldShare(Reservoir kept)
 {
     return kept.mWeight > 0.0 ? kept.mTotal / kept.mWeight : 0.0;
+}
+
+const uint NO_LAMP = ~0u;
+
+/// Eight words held in two vector registers rather than a local array, so a runtime slot index
+/// selects through swizzles with no function-scope array spill (`SkyChoice`).
+struct LampSlots8
+{
+    uvec4 mLow;
+    uvec4 mHigh;
+};
+
+struct LampWeights8
+{
+    vec4 mLow;
+    vec4 mHigh;
+};
+
+LampSlots8 emptyLampSlots8(uint fill)
+{
+    return LampSlots8(uvec4(fill), uvec4(fill));
+}
+
+uint slotAt8(LampSlots8 slots, uint index)
+{
+    const uvec4 group = index < 4u ? slots.mLow : slots.mHigh;
+    const uint lane = index & 3u;
+    return lane < 2u ? (lane == 0u ? group.x : group.y) : (lane == 2u ? group.z : group.w);
+}
+
+void setSlot8(inout LampSlots8 slots, uint index, uint value)
+{
+    if (index < 4u)
+    {
+        if (index == 0u)
+            slots.mLow.x = value;
+        else if (index == 1u)
+            slots.mLow.y = value;
+        else if (index == 2u)
+            slots.mLow.z = value;
+        else
+            slots.mLow.w = value;
+    }
+    else
+    {
+        if (index == 4u)
+            slots.mHigh.x = value;
+        else if (index == 5u)
+            slots.mHigh.y = value;
+        else if (index == 6u)
+            slots.mHigh.z = value;
+        else
+            slots.mHigh.w = value;
+    }
+}
+
+float weightAt8(LampWeights8 weights, uint index)
+{
+    const vec4 group = index < 4u ? weights.mLow : weights.mHigh;
+    const uint lane = index & 3u;
+    return lane < 2u ? (lane == 0u ? group.x : group.y) : (lane == 2u ? group.z : group.w);
+}
+
+uvec4 packShares8(LampWeights8 weights, float totalWeight)
+{
+    const float invTotal = totalWeight > 0.0 ? 1.0 / totalWeight : 0.0;
+    const vec4 low = clamp(weights.mLow * invTotal, vec4(0.0), vec4(1.0));
+    const vec4 high = clamp(weights.mHigh * invTotal, vec4(0.0), vec4(1.0));
+    return uvec4(packHalf2x16(low.xy), packHalf2x16(low.zw), packHalf2x16(high.xy), packHalf2x16(high.zw));
+}
+
+float unpackShare8(uvec4 packedShares, uint index)
+{
+    const uint word = index < 4u ? (index < 2u ? packedShares.x : packedShares.y)
+                                 : (index < 6u ? packedShares.z : packedShares.w);
+    const vec2 pair = unpackHalf2x16(word);
+    return (index & 1u) == 0u ? pair.x : pair.y;
+}
+
+void swapLampSlot(uint slotIndex, uint bound, inout uint curRow, inout float curWeight, inout uint curDiff,
+    inout uint curSpec, inout uint slotRow, inout float slotWeight, inout uint slotDiff, inout uint slotSpec)
+{
+    if (slotIndex < bound && curWeight > slotWeight)
+    {
+        const uint prevRow = slotRow;
+        const float prevWeight = slotWeight;
+        const uint prevDiff = slotDiff;
+        const uint prevSpec = slotSpec;
+        slotRow = curRow;
+        slotWeight = curWeight;
+        slotDiff = curDiff;
+        slotSpec = curSpec;
+        curRow = prevRow;
+        curWeight = prevWeight;
+        curDiff = prevDiff;
+        curSpec = prevSpec;
+    }
+}
+
+void cascadeLampSlots(uint bound, inout uint curRow, inout float curWeight, inout uint curDiff, inout uint curSpec,
+    inout LampSlots8 rows, inout LampWeights8 weights, inout LampSlots8 diffs, inout LampSlots8 specs)
+{
+    swapLampSlot(
+        0u, bound, curRow, curWeight, curDiff, curSpec, rows.mLow.x, weights.mLow.x, diffs.mLow.x, specs.mLow.x);
+    swapLampSlot(
+        1u, bound, curRow, curWeight, curDiff, curSpec, rows.mLow.y, weights.mLow.y, diffs.mLow.y, specs.mLow.y);
+    swapLampSlot(
+        2u, bound, curRow, curWeight, curDiff, curSpec, rows.mLow.z, weights.mLow.z, diffs.mLow.z, specs.mLow.z);
+    swapLampSlot(
+        3u, bound, curRow, curWeight, curDiff, curSpec, rows.mLow.w, weights.mLow.w, diffs.mLow.w, specs.mLow.w);
+    swapLampSlot(
+        4u, bound, curRow, curWeight, curDiff, curSpec, rows.mHigh.x, weights.mHigh.x, diffs.mHigh.x, specs.mHigh.x);
+    swapLampSlot(
+        5u, bound, curRow, curWeight, curDiff, curSpec, rows.mHigh.y, weights.mHigh.y, diffs.mHigh.y, specs.mHigh.y);
+    swapLampSlot(
+        6u, bound, curRow, curWeight, curDiff, curSpec, rows.mHigh.z, weights.mHigh.z, diffs.mHigh.z, specs.mHigh.z);
+    swapLampSlot(
+        7u, bound, curRow, curWeight, curDiff, curSpec, rows.mHigh.w, weights.mHigh.w, diffs.mHigh.w, specs.mHigh.w);
+}
+
+/// Up to `MAX_DIRECT_LAMP_RAYS` lamps selected for direct shadow-ray tracing at a primary surface:
+/// ranked by delivered BRDF-weighted light (`LightCandidate::mWeight`) so powerful distant lamps that
+/// deliver more light outrank dimmer closer ones while both stay in the top slots, with any excess
+/// beyond `maxRays` folded into an unbiased 1-sample reservoir in the final slot.
+struct DirectLampSet
+{
+    vec3 mUnshadowed;
+    float mTotalWeight;
+    LampSlots8 mLamps;
+    LampSlots8 mDiffuse;
+    LampSlots8 mSpecular;
+    uvec4 mShares;
+    uint mCount;
+    bool mTailDrawn;
+};
+
+DirectLampSet weighDirectLamps(vec3 from, Facing facing, Gloss gloss, vec3 albedo, vec3 modulation, bool lampLit,
+    uint maxRays, inout uint state, out vec3 darkeningOut)
+{
+    DirectLampSet set;
+    set.mUnshadowed = vec3(0.0);
+    set.mTotalWeight = 0.0;
+    set.mLamps = emptyLampSlots8(NO_LAMP);
+    set.mDiffuse = emptyLampSlots8(0u);
+    set.mSpecular = emptyLampSlots8(0u);
+    set.mShares = uvec4(0u);
+    set.mCount = 0u;
+    set.mTailDrawn = false;
+
+    const uint limit = clamp(maxRays, 1u, MAX_DIRECT_LAMP_RAYS);
+    const bool sided = dot(facing.mNormal, facing.mNormal) > 0.0;
+    const uvec2 near = frame.mNoLamps != 0u || !lampLit ? uvec2(0u) : lampsWithin(lampsReaching(from));
+
+    LampWeights8 topWeights = LampWeights8(vec4(-1.0), vec4(-1.0));
+    LampSlots8 rawDiffuse = emptyLampSlots8(0u);
+    LampSlots8 rawSpecular = emptyLampSlots8(0u);
+    Reservoir tail = noLamps();
+    uint detCount = 0u;
+    bool hasTail = false;
+
+    for (uint i = near.x; i < near.y; ++i)
+    {
+        const uint row = lightListAt(i);
+        const GpuLight held = shownLightAt(row);
+        const LightCandidate candidate = lampCandidateAt(held, from, facing, sided, INV_PI, gloss);
+        const vec3 diffuse = candidate.mRadiance * (1.0 - candidate.mFresnel);
+        const vec3 specular = gloss.mGlossy ? candidate.mSpecular : vec3(0.0);
+        set.mUnshadowed += diffuse;
+
+        const float weight = candidate.mWeight;
+        if (!(weight > 0.0))
+            continue;
+
+        set.mTotalWeight += weight;
+
+        uint curRow = row;
+        float curWeight = weight;
+        uint curDiff = packRgb9e5(diffuse);
+        uint curSpec = packRgb9e5(specular);
+
+        if (!hasTail && detCount < limit)
+        {
+            cascadeLampSlots(
+                detCount + 1u, curRow, curWeight, curDiff, curSpec, set.mLamps, topWeights, rawDiffuse, rawSpecular);
+            ++detCount;
+            continue;
+        }
+
+        if (!hasTail)
+        {
+            const uint last = limit - 1u;
+            const uint poppedRow = slotAt8(set.mLamps, last);
+            const float poppedWeight = weightAt8(topWeights, last);
+            const vec3 poppedDiff = unpackRgb9e5(slotAt8(rawDiffuse, last));
+            const vec3 poppedSpec = unpackRgb9e5(slotAt8(rawSpecular, last));
+            tail.mUnshadowed += poppedDiff;
+            considerLamp(tail, state, LightCandidate(vec3(0.0), poppedSpec, vec3(0.0), poppedWeight), poppedRow);
+            setSlot8(set.mLamps, last, NO_LAMP);
+            detCount = last;
+            hasTail = true;
+        }
+
+        cascadeLampSlots(
+            detCount, curRow, curWeight, curDiff, curSpec, set.mLamps, topWeights, rawDiffuse, rawSpecular);
+        tail.mUnshadowed += unpackRgb9e5(curDiff);
+        considerLamp(
+            tail, state, LightCandidate(vec3(0.0), unpackRgb9e5(curSpec), vec3(0.0), curWeight), curRow);
+    }
+
+    darkeningOut = darkeningAt(from, facing, INV_PI, lampLit && set.mTotalWeight > 0.0);
+    const vec3 darkeningScale = 1.0 - min(darkeningOut / max(set.mUnshadowed, vec3(1e-30)), vec3(1.0));
+    const vec3 diffuseScale = albedo * darkeningScale;
+
+    for (uint slot = 0u; slot < detCount; ++slot)
+    {
+        setSlot8(set.mDiffuse, slot, packRgb9e5(unpackRgb9e5(slotAt8(rawDiffuse, slot)) * diffuseScale));
+        setSlot8(set.mSpecular, slot, packRgb9e5(unpackRgb9e5(slotAt8(rawSpecular, slot)) / modulation));
+    }
+
+    if (hasTail && tail.mWeight > 0.0)
+    {
+        setSlot8(set.mLamps, detCount, tail.mLamp);
+        setSlot8(set.mDiffuse, detCount, packRgb9e5(tail.mUnshadowed * diffuseScale));
+        setSlot8(set.mSpecular, detCount, packRgb9e5((tail.mSpecular * heldShare(tail)) / modulation));
+        if (detCount < 4u)
+        {
+            if (detCount == 0u)
+                topWeights.mLow.x = tail.mTotal;
+            else if (detCount == 1u)
+                topWeights.mLow.y = tail.mTotal;
+            else if (detCount == 2u)
+                topWeights.mLow.z = tail.mTotal;
+            else
+                topWeights.mLow.w = tail.mTotal;
+        }
+        else
+        {
+            if (detCount == 4u)
+                topWeights.mHigh.x = tail.mTotal;
+            else if (detCount == 5u)
+                topWeights.mHigh.y = tail.mTotal;
+            else if (detCount == 6u)
+                topWeights.mHigh.z = tail.mTotal;
+            else
+                topWeights.mHigh.w = tail.mTotal;
+        }
+        set.mCount = detCount + 1u;
+        set.mTailDrawn = tail.mWeight < (1.0 - frame.mShadowFloor) * tail.mTotal;
+    }
+    else
+    {
+        set.mCount = detCount;
+    }
+
+    set.mShares = packShares8(topWeights, set.mTotalWeight);
+    return set;
 }
 
 #endif

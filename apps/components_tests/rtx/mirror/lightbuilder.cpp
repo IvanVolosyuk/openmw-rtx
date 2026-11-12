@@ -874,5 +874,72 @@ namespace Rtx
             glow.mLit = true;
             EXPECT_TRUE(isNothing(glow.makeLight())) << "the game's own light is the effect's";
         }
+
+        TEST(RtxLightBuilderTest, emptyLampSettingsScaleMeshlessLampsAndLeaveModeledAndSpellLampsAlone)
+        {
+            const osg::Vec3f position(10.0f, 20.0f, 30.0f);
+            const SceneUtil::LightCommon record = describe(128, 0x00FFFFFF, 0);
+            const osg::ref_ptr<SceneUtil::LightSource> modeled
+                = SceneUtil::createLightSource(record, ~0u, /*isExterior=*/false, osg::Vec4f(0, 0, 0, 1));
+            modeled->setEmpty(false);
+            const osg::ref_ptr<SceneUtil::LightSource> meshless
+                = SceneUtil::createLightSource(record, ~0u, /*isExterior=*/false, osg::Vec4f(0, 0, 0, 1));
+            meshless->setEmpty(true);
+            const osg::ref_ptr<SceneUtil::LightSource> spell
+                = Testing::makeLightSource(200.0f, osg::Vec4f(), osg::Vec4f(1.0f, 1.0f, 1.0f, 1.0f));
+            spell->setEmpty(true);
+
+            const Light base = *makeLight(record, position, 0.0, modeled->getId()).value();
+            const Light spellBase = *makeLight(*spell, position, 0.0).value();
+
+            const LampSettings tuned{ .mEmptyBrightness = 0.5f, .mEmptySourceScale = 2.5f };
+            const Light modeledTuned = *makeLight(*modeled, position, 0.0, tuned).value();
+            const Light recordModeled
+                = *makeLight(record, position, 0.0, modeled->getId(), tuned, /*empty=*/false).value();
+            EXPECT_EQ(modeledTuned.mIntensity, base.mIntensity);
+            EXPECT_EQ(modeledTuned.mSourceRadius, base.mSourceRadius);
+            EXPECT_EQ(recordModeled.mIntensity, base.mIntensity);
+            EXPECT_EQ(recordModeled.mSourceRadius, base.mSourceRadius);
+
+            const Light meshlessGraph = *makeLight(*meshless, position, 0.0, tuned).value();
+            const Light meshlessRecord
+                = *makeLight(record, position, 0.0, meshless->getId(), tuned, /*empty=*/true).value();
+            EXPECT_EQ(meshlessGraph.mIntensity, meshlessRecord.mIntensity);
+            EXPECT_EQ(meshlessGraph.mSourceRadius, meshlessRecord.mSourceRadius);
+            EXPECT_FLOAT_EQ(meshlessGraph.mIntensity.x(), base.mIntensity.x() * 0.5f);
+            EXPECT_FLOAT_EQ(meshlessGraph.mSourceRadius, base.mSourceRadius * 2.5f);
+            EXPECT_FLOAT_EQ(meshlessGraph.mReach, base.mReach);
+
+            const Light spellTuned = *makeLight(*spell, position, 0.0, tuned).value();
+            EXPECT_EQ(spellTuned.mIntensity, spellBase.mIntensity);
+            EXPECT_EQ(spellTuned.mSourceRadius, spellBase.mSourceRadius);
+
+            const LampSettings disabled{ .mEmptyBrightness = 0.0f, .mEmptySourceScale = 2.0f };
+            EXPECT_TRUE(isNothing(makeLight(*meshless, position, 0.0, disabled)));
+            EXPECT_TRUE(isNothing(makeLight(record, position, 0.0, meshless->getId(), disabled, /*empty=*/true)));
+            EXPECT_TRUE(isLamp(makeLight(*modeled, position, 0.0, disabled)));
+            EXPECT_TRUE(isLamp(makeLight(*spell, position, 0.0, disabled)));
+
+            const LampSettings shortened{ .mSourceScale = 0.5f, .mReachScale = 0.5f };
+            const Light shortLamp = *makeLight(record, position, 0.0, modeled->getId(), shortened).value();
+            EXPECT_FLOAT_EQ(shortLamp.mReach, base.mReach * 0.5f);
+            EXPECT_FLOAT_EQ(shortLamp.mSourceRadius, base.mSourceRadius * 0.5f);
+
+            Glow glow;
+            SpriteEmitter flames{};
+            flames.mCentre = position;
+            flames.mReach = 8.0f;
+            flames.mCount = 1;
+            flames.mFlags = Shaders::EMITTER_ADDITIVE;
+            const std::vector<Sprite> singleSprite{
+                Sprite{ .mPosition = position, .mRadius = 2.0f, .mColour = osg::Vec3f(1, 1, 1), .mAlpha = 1.0f }
+            };
+            glow.addSprites(flames, singleSprite, osg::Vec3f(0.5f, 0.5f, 0.5f));
+            const Light glowDefault = *glow.makeLight().value();
+            const Light glowShort = *glow.makeLight(shortened).value();
+            EXPECT_FLOAT_EQ(glowShort.mReach, glowDefault.mReach * 0.5f);
+            EXPECT_FLOAT_EQ(glowShort.mSourceRadius, glowDefault.mSourceRadius * 0.5f);
+            EXPECT_FLOAT_EQ(glowShort.mClearance, glowDefault.mClearance);
+        }
     }
 }

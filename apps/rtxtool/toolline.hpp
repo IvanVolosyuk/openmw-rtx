@@ -63,6 +63,13 @@ namespace RtxTool
             std::optional<float> mDistantCells;
             std::optional<bool> mDistantStatics;
             std::optional<float> mGamma;
+            std::optional<int> mAmbientBrightness;
+            std::optional<int> mLampReach;
+            std::optional<int> mLampFalloff;
+            std::optional<int> mLampSourceSize;
+            std::optional<int> mEmptyLampBrightness;
+            std::optional<int> mIndirectBrightness;
+            std::optional<int> mEmissiveBounce;
 
             /// `--memory-budget`, in bytes.
             std::optional<std::uint64_t> mMemoryBudget;
@@ -79,12 +86,14 @@ namespace RtxTool
 
             Rtx::UpscalerKind mUpscaler = Rtx::UpscalerKind::Fsr;
 
-            /// Which of the bounces' switches the line named: a window takes the rest from the player's
+            /// Which of the bounces' and lamps' switches the line named: a window takes the rest from the player's
             /// settings, where its menu moves them.
             struct BouncesNamed
             {
                 bool mIndirect = false;
                 bool mBounceRays = false;
+                bool mDirectLampRays = false;
+                bool mShadowFloor = false;
             };
             BouncesNamed mBouncesNamed;
         };

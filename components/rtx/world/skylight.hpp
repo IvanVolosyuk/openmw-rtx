@@ -87,7 +87,7 @@ namespace Rtx
     /// `s`: nothing at noon and nothing at night, whose sun is the original engine's stand-in for
     /// the moons this renderer traces. The ambient's share is `E / 4pi`: a directional source
     /// delivers a quarter of its irradiance averaged over every orientation.
-    Skylight makeSkylight(const SkyReading& sky);
+    Skylight makeSkylight(const SkyReading& sky, float ambientScale = 1.0f);
 
     /// What to hold a measured exposure back by for a sky delivering this much light: one where
     /// the hour delivers a full sun's worth or more, falling from there. A histogram normalises
@@ -166,7 +166,7 @@ namespace Rtx
     /// every crack a room's shell is built from. So the sunlight's direction is taken away, over
     /// `INV_FOUR_PI`, and a traced bounce's landing, a surface with no bounce and the water each take a
     /// share of it and of the ambient. The sky is the fog colour at both ends and never a light.
-    Daylight makeRoomLight(const ESM::Cell::AMBIstruct& room);
+    Daylight makeRoomLight(const ESM::Cell::AMBIstruct& room, float ambientScale = 1.0f);
 
     /// What the air leaves of a body in the sky, per channel: Rayleigh optical depth at the three
     /// sRGB primaries — `0.008569 λ^-4` with its usual correction, 0.068, 0.097 and 0.221 at the

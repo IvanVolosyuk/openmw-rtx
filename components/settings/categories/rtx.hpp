@@ -14,10 +14,16 @@ namespace Settings
         using WithIndex::WithIndex;
 
         SettingValue<int> mLampSourceSize{ mIndex, "RTX", "lamp source size", makeClampSanitizerInt(1, 100) };
+        SettingValue<int> mLampReach{ mIndex, "RTX", "lamp reach", makeClampSanitizerInt(25, 200) };
+        SettingValue<int> mLampFalloff{ mIndex, "RTX", "lamp falloff", makeClampSanitizerInt(50, 300) };
         SettingValue<int> mLampFlicker{ mIndex, "RTX", "lamp flicker strength", makeClampSanitizerInt(0, 300) };
         SettingValue<int> mLampSpeed{ mIndex, "RTX", "lamp animation speed", makeClampSanitizerInt(10, 400) };
         SettingValue<int> mLampMovement{ mIndex, "RTX", "lamp movement", makeClampSanitizerInt(0, 2000) };
         SettingValue<int> mLampBreathing{ mIndex, "RTX", "lamp size variation", makeClampSanitizerInt(0, 90) };
+        SettingValue<int> mEmptyLampBrightness{ mIndex, "RTX", "empty lamp brightness", makeClampSanitizerInt(0, 200) };
+        SettingValue<int> mEmptyLampSourceSize{ mIndex, "RTX", "empty lamp source size",
+            makeClampSanitizerInt(25, 400) };
+        SettingValue<int> mAmbientBrightness{ mIndex, "RTX", "ambient brightness", makeClampSanitizerInt(0, 200) };
 
         /// The most cells `distant land cells` takes: a bound on how much world a frame is asked to
         /// stand, and so on what the ring's ask costs. Nought stays nought, which hands the reach
@@ -30,6 +36,9 @@ namespace Settings
 
         /// The most bounce rays the eye's surface may trace, which the trace keeps a landing's list for.
         static constexpr int sMaxBounceRays = static_cast<int>(Rtx::Shaders::MAX_BOUNCE_RAYS);
+
+        /// The most direct lamp shadow rays the eye's surface may trace in a frame.
+        static constexpr int sMaxDirectLampRays = static_cast<int>(Rtx::Shaders::MAX_DIRECT_LAMP_RAYS);
 
         /// How far out from the eye the world is built, in cells: handed to the world mirror where
         /// the renderer is made and again when the menu moves it, so the rings, the air and the map
@@ -57,9 +66,19 @@ namespace Settings
         SettingValue<bool> mAntiFirefly{ mIndex, "RTX", "anti firefly" };
         SettingValue<float> mIndirectLimit{ mIndex, "RTX", "indirect brightness limit",
             makeClampSanitizerFloat(0.0f, 64.0f) };
+        SettingValue<int> mIndirectBrightness{ mIndex, "RTX", "indirect brightness", makeClampSanitizerInt(0, 200) };
+        SettingValue<int> mEmissiveBounce{ mIndex, "RTX", "emissive bounce", makeClampSanitizerInt(0, 200) };
 
         /// How many bounce rays the eye's surface traces a frame: `Rtx::SamplingSwitches::mBounceRays`.
         SettingValue<int> mBounceRays{ mIndex, "RTX", "bounce rays", makeClampSanitizerInt(1, sMaxBounceRays) };
+
+        /// How many direct lamp shadow rays the eye's surface traces a frame: `Rtx::SamplingSwitches::mDirectLampRays`.
+        SettingValue<int> mDirectLampRays{ mIndex, "RTX", "direct lamp rays",
+            makeClampSanitizerInt(1, sMaxDirectLampRays) };
+
+        /// Share of a pixel's light (in percent) under which a weak sky or tail source does not steal the
+        /// shadow draw: `Rtx::SamplingSwitches::mShadowFloor`.
+        SettingValue<int> mShadowDrawFloor{ mIndex, "RTX", "shadow draw floor", makeClampSanitizerInt(0, 25) };
 
         /// What the content's `_spec` maps mean, as `Rtx::sSpecularLayoutNames` spells the layouts:
         /// `classic` or `metal roughness`, read by it at load. Read where the renderer is

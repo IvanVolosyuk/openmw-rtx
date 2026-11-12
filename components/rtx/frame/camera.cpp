@@ -51,8 +51,9 @@ namespace Rtx
             // No day to lift, until a world says the sun is up.
             constants.mDaylightGain = 1.0f;
 
-            // One bounce ray, until a reconstruction says how many (`sampleFrame`).
+            // One bounce ray and one direct lamp ray, until a reconstruction says how many (`sampleFrame`).
             constants.mBounceRays = 1;
+            constants.mDirectLampRays = 1;
 
             // Not zero, which would be sea level: a world with no water has to answer "how deep
             // is this point" with never, and only an infinity does that without a second

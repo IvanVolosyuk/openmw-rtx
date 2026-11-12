@@ -98,6 +98,11 @@ namespace Rtx
         void setBounceRays(std::uint32_t rays) override;
         void setAntiFirefly(bool enabled) override;
         void setIndirectLimit(float multiple) override;
+        void setDirectLampRays(std::uint32_t rays) override;
+        void setShadowFloor(float floor) override;
+        void setLampFalloff(float falloff) override;
+        void setIndirectBrightness(float brightness) override;
+        void setEmissiveBounce(float bounce) override;
         void skipFrame() override;
         FrameExtents getExtents() const override;
         const RenderProfile& getProfile() const override { return mProfile; }

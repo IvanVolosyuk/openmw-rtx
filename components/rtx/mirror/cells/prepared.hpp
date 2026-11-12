@@ -351,6 +351,9 @@ namespace Rtx
         std::uint32_t mGate = Terrain::sNoGate;
 
         SceneUtil::LightCommon mRecord;
+
+        /// Whether the lamp's model carries neither geometry nor particles (`SceneUtil::LightSource::getEmpty`).
+        bool mEmpty = false;
     };
 
     /// What a thread hands the frame for one cell: its ground, the references that page, reduced

@@ -123,7 +123,7 @@ namespace MWRender
         // A room's light out of the record the cell wrote and not the rasterizer's reading of it,
         // which lifts the ambient for its own falloff and points a directional light.
         const std::optional<Rtx::Daylight> room
-            = world.mRoom.has_value() ? std::optional(Rtx::makeRoomLight(*world.mRoom)) : std::nullopt;
+            = world.mRoom.has_value() ? std::optional(Rtx::makeRoomLight(*world.mRoom, mAmbientScale)) : std::nullopt;
 
         // The horizon is the fog and the zenith is the sky's own, which is the pair Morrowind
         // records. Decoded here, because the world does not know what a transport is.
@@ -154,7 +154,7 @@ namespace MWRender
             .mDiscColour = Rtx::decodeColour(weather.mSunDiscColor),
             .mGlare = weather.mGlareView,
         };
-        const Rtx::Skylight light = room.has_value() ? room->mLight : Rtx::makeSkylight(reading);
+        const Rtx::Skylight light = room.has_value() ? room->mLight : Rtx::makeSkylight(reading, mAmbientScale);
 
         // The recorded depth and not the ramp `FogManager` made of it, which exists to hide a far
         // clip plane. A quasi-exterior stands in the weather's air, because the weather system is

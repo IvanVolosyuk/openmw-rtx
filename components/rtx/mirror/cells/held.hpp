@@ -122,6 +122,7 @@ namespace Rtx
 
         SceneUtil::LightCommon mRecord;
         ReferenceState mState;
+        bool mEmpty = false;
     };
 
     /// A cell's ground as the frame holds it: its rows, where it stands, and the readings of its

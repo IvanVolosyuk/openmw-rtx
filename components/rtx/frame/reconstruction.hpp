@@ -68,6 +68,20 @@ namespace Rtx
         /// Maximum per-ray indirect luminance in multiples of exposed reference white; zero disables.
         float mIndirectLimit = 0.0f;
 
+        /// How many direct lamp shadow rays a primary solid traces, from one to
+        /// `Shaders::MAX_DIRECT_LAMP_RAYS`: ranked by delivered BRDF-weighted light with any excess
+        /// folded into an unbiased reservoir in the final slot.
+        std::uint32_t mDirectLampRays = 1;
+
+        /// Lamp distance-attenuation exponent scale (`1.0` = physical inverse-square, `> 1.0` = steeper falloff).
+        float mLampFalloff = 1.0f;
+
+        /// Gain applied to bounced diffuse and fill indirect light (`1.0` = default).
+        float mIndirectBrightness = 1.0f;
+
+        /// Gain applied to non-lamp emissive surfaces at bounce landings (`1.0` = default).
+        float mEmissiveBounce = 1.0f;
+
         bool operator==(const SamplingSwitches& other) const = default;
     };
 

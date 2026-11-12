@@ -434,6 +434,7 @@ namespace Rtx
                 .mContent = lamp.mTransform,
                 .mRecord = lamp.mRecord,
                 .mState = heard(lamp.mRefNum, lamp.mGate),
+                .mEmpty = lamp.mEmpty,
             });
 
         // By where each is met within a reference, so a change reaches a reference's placements in
@@ -758,7 +759,7 @@ namespace Rtx
                 continue;
 
             const Misc::Result<std::optional<Light>, std::string_view> light = makeLight(lamp.mRecord, lamp.mPosition,
-                around.mSimulationTime, static_cast<int>(lamp.mState.mRefNum.mIndex), around.mLamps);
+                around.mSimulationTime, static_cast<int>(lamp.mState.mRefNum.mIndex), around.mLamps, lamp.mEmpty);
             assert(light.isOk() && "a lamp the reader carried that the frame refuses");
             if (!light.value().has_value())
                 continue;

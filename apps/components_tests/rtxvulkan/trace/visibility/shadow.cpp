@@ -960,5 +960,204 @@ namespace Rtx::Testing
             ASSERT_GT(sunLight, 0.0f) << "a sun that lights nothing proves nothing";
             EXPECT_LE(worst, sunLight * 1e-3f) << "the lamp's bit was filtered into the sun's light";
         }
+
+        TEST_F(RtxVisibilityTest, multiLampRaysCastSimultaneousShadowsAndRankStrongDistantLampsOverDimCloseOnes)
+        {
+            constexpr std::uint32_t size = 64;
+
+            Shaders::VisibilityConstants camera = Testing::makeCamera(
+                osg::Vec3f(0.0f, -1.0f, 300.0f), osg::Vec3f(0.0f, 0.0f, 0.0f), 60.0f, size, size, 100000.0f);
+            camera.mSkyHorizon = osg::Vec3f();
+            camera.mSkyZenith = osg::Vec3f();
+            camera.mSun.mIrradiance = osg::Vec3f();
+
+            // 1. Four coloured lamps casting four distinct shadows on a single frame when mDirectLampRays = 4.
+            {
+                SceneDesc scene;
+                addQuad(scene, sheetAt(4000.0f, 0.0f));
+                addQuad(scene,
+                    std::array<osg::Vec3f, 4>{ osg::Vec3f(-30.0f, -30.0f, 30.0f), osg::Vec3f(30.0f, -30.0f, 30.0f),
+                        osg::Vec3f(30.0f, 30.0f, 30.0f), osg::Vec3f(-30.0f, 30.0f, 30.0f) });
+
+                const std::array<std::pair<osg::Vec2f, osg::Vec3f>, 4> lamps{ {
+                    { osg::Vec2f(-100.0f, -100.0f), osg::Vec3f(20000.0f, 0.0f, 0.0f) },
+                    { osg::Vec2f(100.0f, -100.0f), osg::Vec3f(0.0f, 20000.0f, 0.0f) },
+                    { osg::Vec2f(-100.0f, 100.0f), osg::Vec3f(0.0f, 0.0f, 20000.0f) },
+                    { osg::Vec2f(100.0f, 100.0f), osg::Vec3f(15000.0f, 15000.0f, 15000.0f) },
+                } };
+                for (const auto& [place, intensity] : lamps)
+                    scene.addLight(Light{
+                        .mPosition = osg::Vec3f(place.x(), place.y(), 60.0f),
+                        .mIntensity = intensity,
+                        .mReach = 500.0f,
+                        .mSourceRadius = 0.0f,
+                    });
+
+                camera.mFrame = 0;
+                const Frame reference = shoot(
+                    scene, {}, camera, size, { .mFrames = 256u, .mIndirect = false, .mDirectLampRays = 1u });
+
+                camera.mFrame = 1000;
+                const Frame oneRay
+                    = shoot(scene, {}, camera, size, { .mIndirect = false, .mDirectLampRays = 1u });
+                const Frame fourRays
+                    = shoot(scene, {}, camera, size, { .mIndirect = false, .mDirectLampRays = 4u });
+
+                camera.mFrame = 1001;
+                const Frame oneRayNext
+                    = shoot(scene, {}, camera, size, { .mIndirect = false, .mDirectLampRays = 1u });
+                const Frame fourRaysNext
+                    = shoot(scene, {}, camera, size, { .mIndirect = false, .mDirectLampRays = 4u });
+
+                for (std::size_t channel = 0; channel < 3; ++channel)
+                {
+                    const float oneFlicker = oneRay.errorFrom(oneRayNext, channel);
+                    const float fourFlicker = fourRays.errorFrom(fourRaysNext, channel);
+                    ASSERT_GT(oneFlicker, 0.005f) << "channel " << channel;
+                    EXPECT_EQ(fourFlicker, 0.0f)
+                        << "four deterministic rays for four point lamps must have zero frame-to-frame roulette "
+                           "flicker, channel "
+                        << channel;
+
+                    const float oneError = oneRay.errorFrom(reference, channel);
+                    const float fourError = fourRays.errorFrom(reference, channel);
+                    EXPECT_LT(fourError, oneError * 0.35f)
+                        << "four deterministic rays must agree with the 256-frame 1-ray Monte Carlo mean, channel "
+                        << channel << " (oneRay=" << oneError << ", fourRays=" << fourError << ")";
+                }
+
+                Shot denoisedOne = filteredRun(8u, 2000u);
+                denoisedOne.mIndirect = false;
+                denoisedOne.mDirectLampRays = 1u;
+                Shot denoisedFour = denoisedOne;
+                denoisedFour.mDirectLampRays = 4u;
+                const Frame filteredOne = shoot(scene, {}, camera, size, denoisedOne);
+                const Frame filteredFour = shoot(scene, {}, camera, size, denoisedFour);
+                EXPECT_LT(filteredFour.errorFrom(fourRays), filteredOne.errorFrom(fourRays))
+                    << "four direct lamp rays also reduce error through the built-in shadow denoiser";
+            }
+
+            // 2. Delivered-light ranking: a powerful distant red lamp outranks three closer dim green/blue lamps,
+            //    so even with mDirectLampRays = 2 (top-1 deterministic + 1 reservoir ray for the 3 weaker lamps),
+            //    the powerful distant red lamp is deterministically shadowed at every pixel under its occluder.
+            {
+                SceneDesc scene;
+                addQuad(scene, sheetAt(4000.0f, 0.0f));
+                // Bar at y in [40, 120], z = 60 casts a shadow from the distant red lamp at (0, 240, 180)
+                // onto the floor around the origin, without blocking the three close lamps near z = 40, y <= 0.
+                addQuad(scene,
+                    std::array<osg::Vec3f, 4>{ osg::Vec3f(-60.0f, 40.0f, 60.0f), osg::Vec3f(60.0f, 40.0f, 60.0f),
+                        osg::Vec3f(60.0f, 120.0f, 60.0f), osg::Vec3f(-60.0f, 120.0f, 60.0f) });
+
+                // Powerful distant red lamp (~300 units from origin, high delivered irradiance).
+                scene.addLight(Light{
+                    .mPosition = osg::Vec3f(0.0f, 240.0f, 180.0f),
+                    .mIntensity = osg::Vec3f(600000.0f, 0.0f, 0.0f),
+                    .mReach = 2000.0f,
+                    .mSourceRadius = 0.0f,
+                });
+                // Three much closer (~50 units from origin) but dim lamps.
+                scene.addLight(Light{
+                    .mPosition = osg::Vec3f(0.0f, -30.0f, 40.0f),
+                    .mIntensity = osg::Vec3f(0.0f, 400.0f, 0.0f),
+                    .mReach = 500.0f,
+                    .mSourceRadius = 0.0f,
+                });
+                scene.addLight(Light{
+                    .mPosition = osg::Vec3f(-35.0f, -10.0f, 40.0f),
+                    .mIntensity = osg::Vec3f(0.0f, 0.0f, 350.0f),
+                    .mReach = 500.0f,
+                    .mSourceRadius = 0.0f,
+                });
+                scene.addLight(Light{
+                    .mPosition = osg::Vec3f(35.0f, -10.0f, 40.0f),
+                    .mIntensity = osg::Vec3f(0.0f, 350.0f, 350.0f),
+                    .mReach = 500.0f,
+                    .mSourceRadius = 0.0f,
+                });
+
+                camera.mFrame = 77;
+                const Frame ranked
+                    = shoot(scene, {}, camera, size, { .mIndirect = false, .mDirectLampRays = 2u });
+
+                // Sample a 6x6 patch around the centre of the floor (x=0, y=0), which lies squarely inside the
+                // distant red lamp's shadow umbra while receiving unblocked green/blue light from the close lamps.
+                std::size_t shadowedPixels = 0;
+                for (std::uint32_t y = size / 2 - 3; y < size / 2 + 3; ++y)
+                {
+                    for (std::uint32_t x = size / 2 - 3; x < size / 2 + 3; ++x)
+                    {
+                        const std::size_t idx = (std::size_t{ y } * size + x) * 4;
+                        EXPECT_LE(ranked.mRadiance[idx + 0], 1e-5f)
+                            << "powerful distant red lamp leaked through its occluder at (" << x << "," << y << ")";
+                        EXPECT_GT(ranked.mRadiance[idx + 1] + ranked.mRadiance[idx + 2], 1e-3f)
+                            << "closer dim lamps should still illuminate the red lamp's shadow at (" << x << "," << y
+                            << ")";
+                        ++shadowedPixels;
+                    }
+                }
+                EXPECT_EQ(shadowedPixels, 36u);
+            }
+
+            // 3. Lamp falloff steepens distance attenuation of distant hall lamps relative to near lamps
+            //    while keeping unit falloff (1.0) exact, and emissive bounce / indirect brightness scale
+            //    bounced glowing window floodlight without dimming primary emissives.
+            {
+                SceneDesc hallScene;
+                addQuad(hallScene, sheetAt(4000.0f, 0.0f));
+                // Near green lamp (~80 units from origin) vs distant red hall lamp (~420 units from origin).
+                hallScene.addLight(Light{
+                    .mPosition = osg::Vec3f(0.0f, -60.0f, 55.0f),
+                    .mIntensity = osg::Vec3f(0.0f, 4000.0f, 0.0f),
+                    .mReach = 1200.0f,
+                    .mSourceRadius = 0.0f,
+                });
+                hallScene.addLight(Light{
+                    .mPosition = osg::Vec3f(0.0f, 360.0f, 220.0f),
+                    .mIntensity = osg::Vec3f(80000.0f, 0.0f, 0.0f),
+                    .mReach = 1200.0f,
+                    .mSourceRadius = 0.0f,
+                });
+
+                camera.mFrame = 12;
+                const Frame nominal = shoot(
+                    hallScene, {}, camera, size, { .mIndirect = false, .mDirectLampRays = 2u, .mLampFalloff = 1.0f });
+                const Frame steeper = shoot(
+                    hallScene, {}, camera, size, { .mIndirect = false, .mDirectLampRays = 2u, .mLampFalloff = 1.8f });
+
+                const std::size_t centre = (std::size_t{ size / 2 } * size + size / 2) * 4;
+                const float nominalFarOverNear = nominal.mRadiance[centre + 0] / nominal.mRadiance[centre + 1];
+                const float steeperFarOverNear = steeper.mRadiance[centre + 0] / steeper.mRadiance[centre + 1];
+                EXPECT_GT(nominal.mRadiance[centre + 1], 0.0f);
+                EXPECT_LT(steeperFarOverNear, nominalFarOverNear * 0.25f)
+                    << "steeper lamp falloff must suppress distant hall irradiance relative to local lamps";
+
+                // Glowing emissive ceiling panel at z = 450 (above the camera at z = 300) bouncing onto the floor.
+                SceneDesc glowScene;
+                addQuad(glowScene, sheetAt(4000.0f, 0.0f));
+                const Index glowMat = glowScene.addMaterial(Material{
+                    .mEmissiveColour = osg::Vec3f(4.0f, 4.0f, 4.0f),
+                    .mTwoSided = true,
+                });
+                addQuad(glowScene,
+                    std::array<osg::Vec3f, 4>{ osg::Vec3f(-1200.0f, -1200.0f, 450.0f),
+                        osg::Vec3f(1200.0f, -1200.0f, 450.0f), osg::Vec3f(1200.0f, 1200.0f, 450.0f),
+                        osg::Vec3f(-1200.0f, 1200.0f, 450.0f) },
+                    glowMat);
+
+                const Frame fullGlowBounce = shoot(glowScene, {}, camera, size,
+                    { .mFrames = 16u, .mIndirect = true, .mBounceRays = 4u, .mEmissiveBounce = 1.0f });
+                const Frame tamedGlowBounce = shoot(glowScene, {}, camera, size,
+                    { .mFrames = 16u, .mIndirect = true, .mBounceRays = 4u, .mEmissiveBounce = 0.1f });
+                const Frame dimmedIndirect = shoot(glowScene, {}, camera, size,
+                    { .mFrames = 16u, .mIndirect = true, .mBounceRays = 4u, .mIndirectBrightness = 0.25f });
+
+                EXPECT_GT(fullGlowBounce.mRadiance[centre + 0], 0.05f);
+                EXPECT_NEAR(tamedGlowBounce.mRadiance[centre + 0], fullGlowBounce.mRadiance[centre + 0] * 0.1f,
+                    fullGlowBounce.mRadiance[centre + 0] * 0.02f);
+                EXPECT_NEAR(dimmedIndirect.mRadiance[centre + 0], fullGlowBounce.mRadiance[centre + 0] * 0.25f,
+                    fullGlowBounce.mRadiance[centre + 0] * 0.02f);
+            }
+        }
     }
 }

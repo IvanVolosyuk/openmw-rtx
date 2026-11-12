@@ -295,6 +295,11 @@ namespace Rtx::Shaders
     /// light at a higher tracing cost; the configured count, not this capacity, controls the work.
     const uint MAX_BOUNCE_RAYS = 16u;
 
+    /// The most lamp shadow rays a primary pixel's direct stage traces a frame, `[RTX] direct lamp
+    /// rays`'s top: up to `MAX_DIRECT_LAMP_RAYS` lamps are traced individually at each seen solid,
+    /// the brightest by delivered light deterministic and any remainder resampled into the last ray.
+    const uint MAX_DIRECT_LAMP_RAYS = 8u;
+
     /// And the lists the later stages run over (`StageTiles`): a storage buffer, its head each
     /// list's indirect dispatch, a `VkDispatchIndirectCommand` and a word beside it that counts what
     /// the list holds, the media stage's, the layers' and the water's (`STAGE_LIST_*`), and a

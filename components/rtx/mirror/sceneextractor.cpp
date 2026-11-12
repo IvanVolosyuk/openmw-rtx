@@ -726,7 +726,7 @@ namespace Rtx
         // And the effects' lamps after the emitters, because a burst's flames are in them.
         for (const Glow& glow : mGlows)
         {
-            const Misc::Result<std::optional<Light>, std::string_view> made = glow.makeLight();
+            const Misc::Result<std::optional<Light>, std::string_view> made = glow.makeLight(mLampSettings);
             if (!made.isOk())
                 mScene.refusals().refuse(Refused::Lamp, {}, made.error());
             else if (made.value().has_value())

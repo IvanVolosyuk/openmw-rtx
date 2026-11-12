@@ -11,12 +11,16 @@
 #include <utility>
 #include <vector>
 
+#include <osg/Drawable>
+#include <osg/Geometry>
 #include <osg/Matrixf>
 #include <osg/Node>
+#include <osg/NodeVisitor>
 #include <osg/StateSet>
 #include <osg/Transform>
 #include <osg/Vec3f>
 #include <osg/ref_ptr>
+#include <osgParticle/ParticleSystem>
 
 #include <components/crashcatcher/crash.hpp>
 #include <components/crashcatcher/crashnote.hpp>
@@ -79,6 +83,38 @@ namespace Rtx
             const osg::NodePathList paths = find.mFoundNode->getParentalNodePaths(&walked);
             assert(!paths.empty() && "a node the walk found that no path leads to");
             return osg::Vec3f() * osg::computeLocalToWorld(paths.front());
+        }
+
+        class EmptyLightModelVisitor final : public osg::NodeVisitor
+        {
+        public:
+            EmptyLightModelVisitor()
+                : osg::NodeVisitor(TRAVERSE_ALL_CHILDREN)
+            {
+            }
+
+            void apply(osg::Drawable& drawable) override
+            {
+                if (!mEmpty)
+                    return;
+
+                if (dynamic_cast<const osgParticle::ParticleSystem*>(&drawable) != nullptr)
+                    mEmpty = false;
+                else
+                    traverse(drawable);
+            }
+
+            void apply(osg::Geometry&) override { mEmpty = false; }
+
+            bool mEmpty = true;
+        };
+
+        bool isEmptyLightModel(const osg::Node& root)
+        {
+            osg::Node& walked = const_cast<osg::Node&>(root);
+            EmptyLightModelVisitor check;
+            walked.accept(check);
+            return check.mEmpty;
         }
     }
 
@@ -190,17 +226,26 @@ namespace Rtx
         return named->second;
     }
 
-    osg::Vec3f CellReader::anchorOf(const ESM::RefId& lamp)
+    CellReader::LampModelInfo CellReader::lampModelOf(const ESM::RefId& lamp)
     {
-        auto anchored = mAnchors.find(lamp);
-        if (anchored == mAnchors.end())
+        auto cached = mLampModels.find(lamp);
+        if (cached == mLampModels.end())
         {
-            const VFS::Path::Normalized& model = modelPathOf(lamp);
-            const osg::ref_ptr<const osg::Node> node = model.empty() ? nullptr : mContent.getTemplate(model);
-            anchored = mAnchors.emplace(lamp, node != nullptr ? anchorIn(*node) : osg::Vec3f()).first;
+            LampModelInfo info{};
+            if (!Misc::ResourceHelpers::isHiddenMarker(lamp))
+            {
+                const VFS::Path::Normalized& model = modelPathOf(lamp);
+                const osg::ref_ptr<const osg::Node> node = model.empty() ? nullptr : mContent.getTemplate(model);
+                if (node != nullptr)
+                {
+                    info.mAnchor = anchorIn(*node);
+                    info.mEmpty = isEmptyLightModel(*node);
+                }
+            }
+            cached = mLampModels.emplace(lamp, info).first;
         }
 
-        return anchored->second;
+        return cached->second;
     }
 
     PreparedCell& CellReader::read(const osg::Vec2i& cell)
@@ -259,10 +304,10 @@ namespace Rtx
         // Made once here to be judged, and again every walk to be stood, because a flame is a
         // function of the hour and whether a lamp is refused is not. A record off by default
         // casts nothing wherever it is placed, so it is not carried.
-        const osg::Vec3f anchor = anchorOf(ref.mRefId);
+        const LampModelInfo lampModel = lampModelOf(ref.mRefId);
         const osg::Matrixf transform = transformOf(ref);
         const Misc::Result<std::optional<Light>, std::string_view> made
-            = makeLight(*record, anchor * transform, 0.0, static_cast<int>(ref.mRefNum.mIndex));
+            = makeLight(*record, lampModel.mAnchor * transform, 0.0, static_cast<int>(ref.mRefNum.mIndex));
         if (!made.isOk())
         {
             prepared.mRefusals.push_back(Refusal{
@@ -273,11 +318,12 @@ namespace Rtx
             return {};
 
         prepared.mLights.push_back(PreparedLight{
-            .mAnchor = anchor,
+            .mAnchor = lampModel.mAnchor,
             .mTransform = transform,
             .mRefNum = ref.mRefNum,
             .mGate = ref.mGate,
             .mRecord = *record,
+            .mEmpty = lampModel.mEmpty,
         });
         return CarriedLamp{ .mCarried = true, .mGivesLight = givesLight(*record) };
     }

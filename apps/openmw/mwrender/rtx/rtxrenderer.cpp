@@ -175,7 +175,14 @@ namespace MWRender
                         .mUpscale = settings.mUpscale,
                         .mUpscaler = settings.mUpscaler,
                         .mReconstruction = Rtx::ReconstructionRequest{
-                            .mSampling = { .mIndirect = settings.mIndirectLighting, .mBounceRays = settings.mBounceRays, .mIndirectLimit = settings.mIndirectLimit },
+                            .mSampling = { .mShadowFloor = settings.mShadowFloor,
+                                .mIndirect = settings.mIndirectLighting,
+                                .mBounceRays = settings.mBounceRays,
+                                .mIndirectLimit = settings.mIndirectLimit,
+                                .mDirectLampRays = settings.mDirectLampRays,
+                                .mLampFalloff = settings.mLampFalloff,
+                                .mIndirectBrightness = settings.mIndirectBrightness,
+                                .mEmissiveBounce = settings.mEmissiveBounce },
                             .mFilters = { .mAntiFirefly = settings.mAntiFirefly } },
                         .mAnisotropy = settings.mAnisotropy,
                         .mGamma = settings.mGamma,
@@ -187,6 +194,7 @@ namespace MWRender
                     = { .mLevel = Rtx::sValidationByDefault ? Rtx::ValidationLevel::On : Rtx::ValidationLevel::Off },
                 },
                 .mMirror = settings.mMirror,
+                .mAmbientScale = settings.mAmbientScale,
                 .mBackend = backend,
                 .mHeadless = backend == RtxBackend::Null,
                 .mSettled = std::nullopt,
@@ -210,6 +218,7 @@ namespace MWRender
         , mMirror(setup.mMirror)
     {
         mSettled = setup.mSettled;
+        mSky.setAmbientScale(setup.mAmbientScale);
 
         // **Made here, because there is no viewer to make them.** Every renderer needs the four and
         // one built on `osgViewer` gets them already wired together.
@@ -742,20 +751,30 @@ namespace MWRender
     {
         mPhase.expect(Phase::Between, Phase::Run);
         const bool lamps = changed.contains({ "RTX", "lamp source size" })
+            || changed.contains({ "RTX", "lamp reach" })
             || changed.contains({ "RTX", "lamp flicker strength" })
             || changed.contains({ "RTX", "lamp animation speed" }) || changed.contains({ "RTX", "lamp movement" })
-            || changed.contains({ "RTX", "lamp size variation" });
+            || changed.contains({ "RTX", "lamp size variation" })
+            || changed.contains({ "RTX", "empty lamp brightness" })
+            || changed.contains({ "RTX", "empty lamp source size" });
         const bool upscale = changed.contains({ "RTX", "upscale" });
         const bool indirect = changed.contains({ "RTX", "indirect lighting" });
         const bool bounceRays = changed.contains({ "RTX", "bounce rays" });
+        const bool directLampRays = changed.contains({ "RTX", "direct lamp rays" });
+        const bool shadowFloor = changed.contains({ "RTX", "shadow draw floor" });
+        const bool lampFalloff = changed.contains({ "RTX", "lamp falloff" });
+        const bool ambient = changed.contains({ "RTX", "ambient brightness" });
         const bool antiFirefly = changed.contains({ "RTX", "anti firefly" });
         const bool indirectLimit = changed.contains({ "RTX", "indirect brightness limit" });
+        const bool indirectBrightness = changed.contains({ "RTX", "indirect brightness" });
+        const bool emissiveBounce = changed.contains({ "RTX", "emissive bounce" });
         const bool reach
             = changed.contains({ "RTX", "distant land cells" }) || changed.contains({ "Camera", "viewing distance" });
         const bool anisotropy = changed.contains({ "General", "anisotropy" });
         const bool gamma = changed.contains({ "Video", "gamma" });
-        if (!upscale && !indirect && !bounceRays && !reach && !anisotropy && !gamma && !lamps && !antiFirefly
-            && !indirectLimit)
+        if (!upscale && !indirect && !bounceRays && !directLampRays && !shadowFloor && !lampFalloff && !ambient
+            && !reach && !anisotropy && !gamma && !lamps && !antiFirefly && !indirectLimit && !indirectBrightness
+            && !emissiveBounce)
             return;
 
         // What asks is somebody choosing from a menu, so a value the derivation refuses is reported
@@ -794,10 +813,22 @@ namespace MWRender
 
         if (bounceRays)
             mRenderer->setBounceRays(settings->mBounceRays);
+        if (directLampRays)
+            mRenderer->setDirectLampRays(settings->mDirectLampRays);
+        if (shadowFloor)
+            mRenderer->setShadowFloor(settings->mShadowFloor);
+        if (lampFalloff)
+            mRenderer->setLampFalloff(settings->mLampFalloff);
+        if (ambient)
+            mSky.setAmbientScale(settings->mAmbientScale);
         if (antiFirefly)
             mRenderer->setAntiFirefly(settings->mAntiFirefly);
         if (indirectLimit)
             mRenderer->setIndirectLimit(settings->mIndirectLimit);
+        if (indirectBrightness)
+            mRenderer->setIndirectBrightness(settings->mIndirectBrightness);
+        if (emissiveBounce)
+            mRenderer->setEmissiveBounce(settings->mEmissiveBounce);
     }
 
     MyGUI::ITexture& RtxRenderer::freezeFrame() noexcept

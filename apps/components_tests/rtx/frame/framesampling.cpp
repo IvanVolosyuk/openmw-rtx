@@ -140,14 +140,29 @@ namespace Rtx
             EXPECT_EQ(picture.mLampCandidates, Shaders::LAMP_CANDIDATES) << "and its lamps by the default count";
 
             EXPECT_EQ(picture.mBounceRays, 1u) << "and traces one bounce ray";
+            EXPECT_EQ(picture.mDirectLampRays, 1u) << "and traces one direct lamp ray";
+            EXPECT_EQ(picture.mLampShadowDenoised, 0u) << "a picture is unfiltered, so lamp shadows write directly";
+            EXPECT_FLOAT_EQ(picture.mLampFalloffOffset, 0.0f);
+            EXPECT_FLOAT_EQ(picture.mIndirectGainOffset, 0.0f);
+            EXPECT_FLOAT_EQ(picture.mEmissiveBounceOffset, 0.0f);
 
             Reconstruction several;
+            several.mDenoised = true;
             several.mSampling.mBounceRays = 3;
+            several.mSampling.mDirectLampRays = 4;
             several.mSampling.mIndirectLimit = 4.0f;
+            several.mSampling.mLampFalloff = 1.65f;
+            several.mSampling.mIndirectBrightness = 0.65f;
+            several.mSampling.mEmissiveBounce = 0.1f;
             const Shaders::VisibilityConstants traced
                 = sampleFrame(stated(), FrameOptions{}, RenderProfile{}, several, counts, nullptr);
             EXPECT_EQ(traced.mBounceRays, 3u);
+            EXPECT_EQ(traced.mDirectLampRays, 4u);
+            EXPECT_EQ(traced.mLampShadowDenoised, 1u);
             EXPECT_EQ(traced.mIndirectLimit, 4.0f);
+            EXPECT_FLOAT_EQ(traced.mLampFalloffOffset, 0.65f);
+            EXPECT_FLOAT_EQ(traced.mIndirectGainOffset, -0.35f);
+            EXPECT_FLOAT_EQ(traced.mEmissiveBounceOffset, -0.9f);
             EXPECT_EQ(traced.mIndirectExposure, 0u);
 
             several.mSampling.mIndirect = false;

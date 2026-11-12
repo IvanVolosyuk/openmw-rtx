@@ -24,7 +24,19 @@ namespace MWRender
                 .mIndirectLighting = false,
                 .mAntiFirefly = true,
                 .mIndirectLimit = 4.0f,
+                .mIndirectBrightness = 0.65f,
+                .mEmissiveBounce = 0.1f,
                 .mBounceRays = 16,
+                .mDirectLampRays = 6,
+                .mShadowFloor = 0.05f,
+                .mAmbientScale = 0.25f,
+                .mLampFalloff = 1.65f,
+                .mLamps = {
+                    .mSourceScale = 0.5f,
+                    .mReachScale = 0.6f,
+                    .mEmptyBrightness = 0.75f,
+                    .mEmptySourceScale = 2.0f,
+                },
                 .mDistantLandCells = 6.0f,
                 .mViewingDistance = 7168.0f,
                 .mObjectPaging = false,
@@ -53,6 +65,16 @@ namespace MWRender
             EXPECT_EQ(RtxSettings::derive(rayReconstructed).mUpscaler, Rtx::UpscalerKind::DlssRr);
             EXPECT_FALSE(derived.mIndirectLighting);
             EXPECT_EQ(derived.mBounceRays, 16u);
+            EXPECT_EQ(derived.mDirectLampRays, 6u);
+            EXPECT_EQ(derived.mShadowFloor, 0.05f);
+            EXPECT_EQ(derived.mAmbientScale, 0.25f);
+            EXPECT_FLOAT_EQ(derived.mLampFalloff, 1.65f);
+            EXPECT_FLOAT_EQ(derived.mIndirectBrightness, 0.65f);
+            EXPECT_FLOAT_EQ(derived.mEmissiveBounce, 0.1f);
+            EXPECT_EQ(derived.mMirror.mLamps.mSourceScale, 0.5f);
+            EXPECT_EQ(derived.mMirror.mLamps.mReachScale, 0.6f);
+            EXPECT_EQ(derived.mMirror.mLamps.mEmptyBrightness, 0.75f);
+            EXPECT_EQ(derived.mMirror.mLamps.mEmptySourceScale, 2.0f);
             EXPECT_TRUE(derived.mAntiFirefly);
             EXPECT_EQ(derived.mIndirectLimit, 4.0f);
             // Cells and the viewing distance, which a worldspace's grid turns into units: six of
@@ -132,6 +154,100 @@ namespace MWRender
                 RtxSettingValues values = valid();
                 values.mBounceRays = rays;
                 EXPECT_EQ(RtxSettings::derive(values).mBounceRays, static_cast<std::uint32_t>(rays)) << rays;
+            }
+        }
+
+        TEST(RtxSettingsTest, aCountOfDirectLampRaysOrShadowFloorOutsideItsRangeIsRefused)
+        {
+            constexpr int most = static_cast<int>(Rtx::Shaders::MAX_DIRECT_LAMP_RAYS);
+            for (const int rays : { 0, -1, most + 1 })
+            {
+                RtxSettingValues values = valid();
+                values.mDirectLampRays = rays;
+                EXPECT_THROW(RtxSettings::derive(values), Rtx::InputError) << rays;
+            }
+            for (const int rays : { 1, 4, most })
+            {
+                RtxSettingValues values = valid();
+                values.mDirectLampRays = rays;
+                EXPECT_EQ(RtxSettings::derive(values).mDirectLampRays, static_cast<std::uint32_t>(rays)) << rays;
+            }
+
+            for (const float floor :
+                { -0.01f, 0.26f, std::numeric_limits<float>::infinity(), std::numeric_limits<float>::quiet_NaN() })
+            {
+                RtxSettingValues values = valid();
+                values.mShadowFloor = floor;
+                EXPECT_THROW(RtxSettings::derive(values), Rtx::InputError) << floor;
+            }
+            for (const float floor : { 0.0f, 0.05f, 0.25f })
+            {
+                RtxSettingValues values = valid();
+                values.mShadowFloor = floor;
+                EXPECT_FLOAT_EQ(RtxSettings::derive(values).mShadowFloor, floor);
+            }
+
+            for (const float ambient :
+                { -0.01f, 2.01f, std::numeric_limits<float>::infinity(), std::numeric_limits<float>::quiet_NaN() })
+            {
+                RtxSettingValues values = valid();
+                values.mAmbientScale = ambient;
+                EXPECT_THROW(RtxSettings::derive(values), Rtx::InputError) << ambient;
+            }
+            for (const float ambient : { 0.0f, 1.0f, 2.0f })
+            {
+                RtxSettingValues values = valid();
+                values.mAmbientScale = ambient;
+                EXPECT_FLOAT_EQ(RtxSettings::derive(values).mAmbientScale, ambient);
+            }
+
+            for (const float reach :
+                { 0.24f, 2.01f, std::numeric_limits<float>::infinity(), std::numeric_limits<float>::quiet_NaN() })
+            {
+                RtxSettingValues values = valid();
+                values.mLamps.mReachScale = reach;
+                EXPECT_THROW(RtxSettings::derive(values), Rtx::InputError) << reach;
+            }
+            for (const float reach : { 0.25f, 1.0f, 2.0f })
+            {
+                RtxSettingValues values = valid();
+                values.mLamps.mReachScale = reach;
+                EXPECT_FLOAT_EQ(RtxSettings::derive(values).mMirror.mLamps.mReachScale, reach);
+            }
+
+            for (const float falloff :
+                { 0.49f, 3.01f, std::numeric_limits<float>::infinity(), std::numeric_limits<float>::quiet_NaN() })
+            {
+                RtxSettingValues values = valid();
+                values.mLampFalloff = falloff;
+                EXPECT_THROW(RtxSettings::derive(values), Rtx::InputError) << falloff;
+            }
+            for (const float falloff : { 0.5f, 1.0f, 1.65f, 3.0f })
+            {
+                RtxSettingValues values = valid();
+                values.mLampFalloff = falloff;
+                EXPECT_FLOAT_EQ(RtxSettings::derive(values).mLampFalloff, falloff);
+            }
+
+            for (const float gain :
+                { -0.01f, 2.01f, std::numeric_limits<float>::infinity(), std::numeric_limits<float>::quiet_NaN() })
+            {
+                RtxSettingValues indirectValues = valid();
+                indirectValues.mIndirectBrightness = gain;
+                EXPECT_THROW(RtxSettings::derive(indirectValues), Rtx::InputError) << gain;
+
+                RtxSettingValues emissiveValues = valid();
+                emissiveValues.mEmissiveBounce = gain;
+                EXPECT_THROW(RtxSettings::derive(emissiveValues), Rtx::InputError) << gain;
+            }
+            for (const float gain : { 0.0f, 0.1f, 0.65f, 1.0f, 2.0f })
+            {
+                RtxSettingValues values = valid();
+                values.mIndirectBrightness = gain;
+                values.mEmissiveBounce = gain;
+                const RtxSettings derivedGain = RtxSettings::derive(values);
+                EXPECT_FLOAT_EQ(derivedGain.mIndirectBrightness, gain);
+                EXPECT_FLOAT_EQ(derivedGain.mEmissiveBounce, gain);
             }
         }
     }

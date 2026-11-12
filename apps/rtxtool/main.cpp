@@ -191,13 +191,46 @@ namespace RtxTool
                 Crash::fatal("map rules with no name");
             }();
 
+            Rtx::LampSettings lampSettings = watched ? MWRender::RtxSettingValues::fromRegistry().mLamps
+                                                     : Rtx::LampSettings{};
+            if (line.mLampReach.has_value())
+                lampSettings.mReachScale = *line.mLampReach / 100.0f;
+            if (line.mLampSourceSize.has_value())
+                lampSettings.mSourceScale = *line.mLampSourceSize / 25.0f;
+            if (line.mEmptyLampBrightness.has_value())
+                lampSettings.mEmptyBrightness = *line.mEmptyLampBrightness / 100.0f;
+
+            const float ambientScale = line.mAmbientBrightness.has_value() ? (*line.mAmbientBrightness / 100.0f)
+                : watched ? (Settings::rtx().mAmbientBrightness.get() / 100.0f)
+                          : 1.0f;
+            const float lampFalloff = line.mLampFalloff.has_value() ? (*line.mLampFalloff / 100.0f)
+                : watched                                           ? (Settings::rtx().mLampFalloff.get() / 100.0f)
+                                                                    : 1.0f;
+            const float indirectBrightness = line.mIndirectBrightness.has_value() ? (*line.mIndirectBrightness / 100.0f)
+                : watched ? (Settings::rtx().mIndirectBrightness.get() / 100.0f)
+                          : 1.0f;
+            const float emissiveBounce = line.mEmissiveBounce.has_value() ? (*line.mEmissiveBounce / 100.0f)
+                : watched                                                 ? (Settings::rtx().mEmissiveBounce.get() / 100.0f)
+                                                                          : 1.0f;
+
             const Rtx::SamplingSwitches& sampling = line.mReconstruction.mSampling;
             const MWRender::RtxSettings derived = MWRender::RtxSettings::derive(MWRender::RtxSettingValues{
                 .mUpscale = !watched || line.mUpscale.mNamed ? line.mUpscale.mValue : Settings::rtx().mUpscale.get(),
                 .mIndirectLighting = watched && !line.mBouncesNamed.mIndirect ? Settings::rtx().mIndirectLighting.get()
                                                                               : sampling.mIndirect,
+                .mIndirectBrightness = indirectBrightness,
+                .mEmissiveBounce = emissiveBounce,
                 .mBounceRays = watched && !line.mBouncesNamed.mBounceRays ? Settings::rtx().mBounceRays.get()
                                                                           : static_cast<int>(sampling.mBounceRays),
+                .mDirectLampRays = watched && !line.mBouncesNamed.mDirectLampRays
+                    ? Settings::rtx().mDirectLampRays.get()
+                    : static_cast<int>(sampling.mDirectLampRays),
+                .mShadowFloor = watched && !line.mBouncesNamed.mShadowFloor
+                    ? Settings::rtx().mShadowDrawFloor.get() / 100.0f
+                    : sampling.mShadowFloor,
+                .mAmbientScale = ambientScale,
+                .mLampFalloff = lampFalloff,
+                .mLamps = lampSettings,
                 .mDistantLandCells = line.mDistantCells.has_value() ? *line.mDistantCells
                     : watched                                       ? Settings::rtx().mDistantLandCells.get()
                               : command.mShipped.get<float>("RTX", "distant land cells"),
@@ -226,6 +259,7 @@ namespace RtxTool
                     : command.mShipped.get<bool>("Shaders", "apply lighting to environment maps"),
             });
             framed.mSetup.mMirror = derived.mMirror;
+            framed.mSetup.mAmbientScale = derived.mAmbientScale;
 
             // **The layers the command's row says, unless the line names some**: `VerbPolicy`.
             const Rtx::ValidationOptions& validation = command.mLine.mValidation;
@@ -251,6 +285,11 @@ namespace RtxTool
             profile.mUpscaler = line.mUpscaler;
             profile.mReconstruction.mSampling.mIndirect = derived.mIndirectLighting;
             profile.mReconstruction.mSampling.mBounceRays = derived.mBounceRays;
+            profile.mReconstruction.mSampling.mDirectLampRays = derived.mDirectLampRays;
+            profile.mReconstruction.mSampling.mShadowFloor = derived.mShadowFloor;
+            profile.mReconstruction.mSampling.mLampFalloff = derived.mLampFalloff;
+            profile.mReconstruction.mSampling.mIndirectBrightness = derived.mIndirectBrightness;
+            profile.mReconstruction.mSampling.mEmissiveBounce = derived.mEmissiveBounce;
 
             // **What a window's line typed, written where its menu reads it**, so a slider opens at what
             // the frame traces and moves it from there, into this run's own settings file
@@ -260,6 +299,12 @@ namespace RtxTool
             {
                 Settings::rtx().mIndirectLighting.set(derived.mIndirectLighting);
                 Settings::rtx().mBounceRays.set(static_cast<int>(derived.mBounceRays));
+                Settings::rtx().mDirectLampRays.set(static_cast<int>(derived.mDirectLampRays));
+                Settings::rtx().mShadowDrawFloor.set(static_cast<int>(std::lround(derived.mShadowFloor * 100.0f)));
+                Settings::rtx().mLampFalloff.set(static_cast<int>(std::lround(derived.mLampFalloff * 100.0f)));
+                Settings::rtx().mIndirectBrightness.set(
+                    static_cast<int>(std::lround(derived.mIndirectBrightness * 100.0f)));
+                Settings::rtx().mEmissiveBounce.set(static_cast<int>(std::lround(derived.mEmissiveBounce * 100.0f)));
             }
 
             return framed;

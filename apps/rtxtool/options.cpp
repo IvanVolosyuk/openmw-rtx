@@ -101,6 +101,10 @@ namespace RtxTool
                 [](const Value& value, Request& request) {
                     request.mSampling.mBounceRays = value.as<std::uint32_t>();
                 } },
+            { "direct-lamp-rays",
+                [](const Value& value, Request& request) {
+                    request.mSampling.mDirectLampRays = value.as<std::uint32_t>();
+                } },
             { "antilag", [](const Value& value, Request& request) { request.mFilters.mAntilag = value.as<bool>(); } },
             { "history-fix",
                 [](const Value& value, Request& request) { request.mFilters.mHistoryFix = value.as<bool>(); } },
@@ -618,6 +622,34 @@ namespace RtxTool
             "how many bounce rays the eye's surface traces a frame, each in a direction of its own and "
             "worth its share of the bounce: the player's `[RTX] bounce rays`");
 
+        option(sFramed, "direct-lamp-rays",
+            number(between<std::uint32_t>(1, Rtx::Shaders::MAX_DIRECT_LAMP_RAYS))
+                ->default_value(Rtx::SamplingSwitches{}.mDirectLampRays),
+            "how many direct lamp shadow rays the eye's surface traces a frame, ranked by delivered light "
+            "with any weaker tail resampled into the last ray: the player's `[RTX] direct lamp rays`");
+
+        option(sFramed, "ambient-brightness", number(between<int>(0, 200))->default_value(100),
+            "scale (%) applied to Morrowind's record ambient fill: the player's `[RTX] ambient brightness` "
+            "(0 disables fake ambient fill completely)");
+
+        option(sFramed, "lamp-reach", number(between<int>(25, 200))->default_value(100),
+            "scale (%) applied to lamp illumination reach: the player's `[RTX] lamp reach`");
+
+        option(sFramed, "lamp-falloff", number(between<int>(50, 300))->default_value(100),
+            "steepness (%) applied to lamp distance attenuation: the player's `[RTX] lamp falloff`");
+
+        option(sFramed, "lamp-source-size", number(between<int>(1, 100))->default_value(25),
+            "lamp source radius (% of original broad source): the player's `[RTX] lamp source size`");
+
+        option(sFramed, "empty-lamp-brightness", number(between<int>(0, 200))->default_value(100),
+            "scale (%) for meshless placed fill lights: the player's `[RTX] empty lamp brightness`");
+
+        option(sFramed, "indirect-brightness", number(between<int>(0, 200))->default_value(100),
+            "scale (%) applied to bounced diffuse indirect light: the player's `[RTX] indirect brightness`");
+
+        option(sFramed, "emissive-bounce", number(between<int>(0, 200))->default_value(100),
+            "scale (%) applied to emissive glow at bounce landings: the player's `[RTX] emissive bounce`");
+
         option(sFramed, "lamp-candidates",
             number(atLeast<std::uint32_t>(0))->default_value(Rtx::Shaders::LAMP_CANDIDATES),
             "how many lamp candidates a shading point that composes its light — a path's far end, a pane, a "
@@ -922,6 +954,20 @@ namespace RtxTool
             frame.mDistantStatics = on("distant-statics");
         if (named("gamma"))
             frame.mGamma = real("gamma");
+        if (named("ambient-brightness"))
+            frame.mAmbientBrightness = variables["ambient-brightness"].as<int>();
+        if (named("lamp-reach"))
+            frame.mLampReach = variables["lamp-reach"].as<int>();
+        if (named("lamp-falloff"))
+            frame.mLampFalloff = variables["lamp-falloff"].as<int>();
+        if (named("lamp-source-size"))
+            frame.mLampSourceSize = variables["lamp-source-size"].as<int>();
+        if (named("empty-lamp-brightness"))
+            frame.mEmptyLampBrightness = variables["empty-lamp-brightness"].as<int>();
+        if (named("indirect-brightness"))
+            frame.mIndirectBrightness = variables["indirect-brightness"].as<int>();
+        if (named("emissive-bounce"))
+            frame.mEmissiveBounce = variables["emissive-bounce"].as<int>();
         if (named("memory-budget"))
             frame.mMemoryBudget = variables["memory-budget"].as<std::uint64_t>() * 1024 * 1024;
         frame.mPipelineCode = text("pipeline-code");
@@ -932,7 +978,12 @@ namespace RtxTool
         frame.mVariants = on("variants");
         for (const SwitchReader& reader : sSwitchReaders)
             reader.mRead(variables[std::string(reader.mName)], frame.mReconstruction);
-        frame.mBouncesNamed = { named("indirect"), named("bounce-rays") };
+        frame.mBouncesNamed = {
+            named("indirect"),
+            named("bounce-rays"),
+            named("direct-lamp-rays"),
+            named("shadow-floor"),
+        };
 
         ToolLine::Places& places = line.mPlaces;
         places.mView = text("view");

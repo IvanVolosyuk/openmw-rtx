@@ -36,6 +36,9 @@ namespace MWRender
         /// player's and a knob of a run travels with the run.
         MirrorKnobs mMirror{};
 
+        /// Scale applied to cell/weather record ambient fill (`[RTX] ambient brightness`).
+        float mAmbientScale = 1.0f;
+
         /// What draws the frames.
         RtxBackend mBackend = RtxBackend::Vulkan;
 

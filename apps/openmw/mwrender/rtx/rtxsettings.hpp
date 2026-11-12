@@ -23,7 +23,13 @@ namespace MWRender
         bool mIndirectLighting = true;
         bool mAntiFirefly = false;
         float mIndirectLimit = 0.0f;
+        float mIndirectBrightness = 1.0f;
+        float mEmissiveBounce = 1.0f;
         int mBounceRays = 1;
+        int mDirectLampRays = 1;
+        float mShadowFloor = 0.0f;
+        float mAmbientScale = 1.0f;
+        float mLampFalloff = 1.0f;
         Rtx::LampSettings mLamps;
         float mDistantLandCells = 0.0f;
         float mViewingDistance = 0.0f;
@@ -56,9 +62,23 @@ namespace MWRender
         bool mIndirectLighting = true;
         bool mAntiFirefly = false;
         float mIndirectLimit = 0.0f;
+        float mIndirectBrightness = 1.0f;
+        float mEmissiveBounce = 1.0f;
 
         /// `SamplingSwitches::mBounceRays`: the setting, from one to `Shaders::MAX_BOUNCE_RAYS`.
         std::uint32_t mBounceRays = 1;
+
+        /// `SamplingSwitches::mDirectLampRays`: the setting, from one to `Shaders::MAX_DIRECT_LAMP_RAYS`.
+        std::uint32_t mDirectLampRays = 1;
+
+        /// `SamplingSwitches::mShadowFloor`: the setting, from nought to a quarter.
+        float mShadowFloor = 0.0f;
+
+        /// Scale applied to cell and weather record ambient fill (`[RTX] ambient brightness`).
+        float mAmbientScale = 1.0f;
+
+        /// `SamplingSwitches::mLampFalloff`: lamp distance-attenuation steepness (`[RTX] lamp falloff`).
+        float mLampFalloff = 1.0f;
 
         MirrorKnobs mMirror;
 

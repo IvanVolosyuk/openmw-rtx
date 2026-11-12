@@ -562,6 +562,39 @@ namespace Rtx
         }
     }
 
+    void VulkanRenderer::setDirectLampRays(const std::uint32_t rays)
+    {
+        assert(rays >= 1 && rays <= Shaders::MAX_DIRECT_LAMP_RAYS && "a count its reader should have refused");
+        mProfile.mReconstruction.mSampling.mDirectLampRays = rays;
+    }
+
+    void VulkanRenderer::setShadowFloor(const float floor)
+    {
+        assert(floor >= 0.0f && floor <= 0.25f && std::isfinite(floor) && "a floor its reader should have refused");
+        mProfile.mReconstruction.mSampling.mShadowFloor = floor;
+    }
+
+    void VulkanRenderer::setLampFalloff(const float falloff)
+    {
+        assert(
+            falloff >= 0.5f && falloff <= 3.0f && std::isfinite(falloff) && "a falloff its reader should have refused");
+        mProfile.mReconstruction.mSampling.mLampFalloff = falloff;
+    }
+
+    void VulkanRenderer::setIndirectBrightness(const float brightness)
+    {
+        assert(brightness >= 0.0f && brightness <= 2.0f && std::isfinite(brightness)
+            && "an indirect brightness its reader should have refused");
+        mProfile.mReconstruction.mSampling.mIndirectBrightness = brightness;
+    }
+
+    void VulkanRenderer::setEmissiveBounce(const float bounce)
+    {
+        assert(bounce >= 0.0f && bounce <= 2.0f && std::isfinite(bounce)
+            && "an emissive bounce its reader should have refused");
+        mProfile.mReconstruction.mSampling.mEmissiveBounce = bounce;
+    }
+
     void VulkanRenderer::skipFrame()
     {
         if (mRing.isOpen())

@@ -40,7 +40,6 @@ layout(local_size_x = TRACE_WORKGROUP_LANES) in;
 const uint DIRECT_SKY = 0u;
 const uint DIRECT_SKY_OVER = 1u;
 const uint DIRECT_LAMP = 2u;
-const uint DIRECT_RAYS = 3u;
 
 void main()
 {
@@ -61,6 +60,8 @@ void main()
     vec4 lobe = vec4(vec3(0.0), SPECULAR_NO_LOBE);
     if (record.mKind != STAGE_NO_SOLID)
     {
+        const uint lampTurns = clamp(frame.mDirectLampRays, 1u, MAX_DIRECT_LAMP_RAYS);
+
         // **The solid the trace found, resolved off the hit it stored** (`storedSolidOf`), and its
         // light worked out whole but for what its rays answer (`solidLightOf`).
         const SolidLight light = solidLightOf(storedSolidOf(record, stored), pixel);
@@ -68,25 +69,31 @@ void main()
         Passage skyFirst = openPassage();
         Passage skyOver = openPassage();
         Passage lampPassage = openPassage();
-        [[dont_unroll]] for (uint turn = 0u; turn < DIRECT_RAYS; ++turn)
+        MultiLampAccum multiLamps = emptyMultiLampAccum();
+        [[dont_unroll]] for (uint turn = 0u; turn < DIRECT_LAMP + lampTurns; ++turn)
         {
             RayAsk ask = light.mLampRay;
             if (turn == DIRECT_SKY)
                 ask = light.mSkyRay;
             else if (turn == DIRECT_SKY_OVER)
                 ask = light.mSkyOverRay;
+            else if (lampTurns > 1u)
+                ask = directLampAskOf(light, pixel, turn - DIRECT_LAMP, lampTurns);
 
             const Passage passage = passageAnswered(answerAsked(ask));
             if (turn == DIRECT_SKY)
                 skyFirst = passage;
             else if (turn == DIRECT_SKY_OVER)
                 skyOver = passage;
+            else if (lampTurns > 1u)
+                accumulateDirectLampSlot(multiLamps, light, turn - DIRECT_LAMP, passage);
             else
                 lampPassage = passage;
         }
 
-        const SeenSolid seen = seenSolidOf(light,
-            light.mSkyBent ? joinedPassage(skyFirst, skyOver, light.mSkyPath) : skyFirst, lampPassage);
+        const Passage skyJoined = light.mSkyBent ? joinedPassage(skyFirst, skyOver, light.mSkyPath) : skyFirst;
+        const SeenSolid seen = lampTurns > 1u ? seenSolidMultiLampOf(light, skyJoined, multiLamps, pixel)
+                                              : seenSolidOf(light, skyJoined, lampPassage);
 
         // **The solid's light under the layers**, by what the media and the path let through, as
         // the trace took the water's own light down (`visibility.comp`); **its shadowed sources and

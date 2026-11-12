@@ -30,10 +30,15 @@ namespace Rtx
     struct LampSettings
     {
         float mSourceScale = 1.0f;
+        float mReachScale = 1.0f;
         float mFlicker = 1.0f;
         float mSpeed = 1.0f;
         float mMovement = 1.0f;
         float mSizeVariation = 0.1f;
+        float mEmptyBrightness = 1.0f;
+        float mEmptySourceScale = 1.0f;
+
+        bool operator==(const LampSettings&) const = default;
     };
 
     /// Whether a `LIGH` reference standing in a cell casts at all, as the game rules it: off by
@@ -57,7 +62,8 @@ namespace Rtx
     /// number's low word for a light no node carries, where the graph's is the node's own — so a
     /// lamp's phase changes once, on the frame its cell loads and the graph's node takes over.
     Misc::Result<std::optional<Light>, std::string_view> makeLight(const SceneUtil::LightCommon& record,
-        const osg::Vec3f& position, double simulationTime, int id, const LampSettings& settings = {});
+        const osg::Vec3f& position, double simulationTime, int id, const LampSettings& settings = {},
+        bool empty = false);
 
     /// The same light from a colour and a radius: one conversion, so a record read off the content
     /// files and a `SceneUtil::LightSource` read off the graph cannot disagree about how bright a
@@ -205,7 +211,7 @@ namespace Rtx
         /// not read off a record, so what a burst is worth against the lamps of the room is set by
         /// eye — `sGlowGain` and `sGlowReachScale` say how, and a burst is the one lamp in the game
         /// whose whole purpose is the room around it.
-        Misc::Result<std::optional<Light>, std::string_view> makeLight() const;
+        Misc::Result<std::optional<Light>, std::string_view> makeLight(const LampSettings& settings = {}) const;
     };
 
 }

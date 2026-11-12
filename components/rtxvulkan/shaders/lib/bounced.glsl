@@ -48,7 +48,13 @@ void storeBounced(uvec2 pixel, StageRecord record, Arriving arriving, vec3 modul
     // well, since the layers' stage lays nothing over the bounce.
     const vec4 through = imageLoad(stageThroughput, storedAt(at, width, swap));
     const vec3 transmittance = through.rgb * through.a;
-    const Bounce bounced = bounceOf(arriving, record.mBounceLobe);
+    Bounce bounced = bounceOf(arriving, record.mBounceLobe);
+    if (frame.mIndirectGainOffset != 0.0)
+    {
+        const float gain = max(1.0 + frame.mIndirectGainOffset, 0.0);
+        bounced.mDiffuse *= gain;
+        bounced.mFill *= gain;
+    }
     const ivec2 indirectAt = channelAt(CHANNEL_INDIRECT, at, width, swap);
     const ivec2 fillAt = channelAt(CHANNEL_FILL, at, width, swap);
     // **Written whole where nothing came before**, and not added to a nought: a negative zero plus

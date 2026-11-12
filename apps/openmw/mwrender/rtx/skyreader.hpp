@@ -87,6 +87,9 @@ namespace MWRender
         /// Where the sky's clock stands, which a frame's air is recorded with.
         const Sky::SkyClock& getClock() const { return mClock; }
 
+        /// Scales record ambient fill (`[RTX] ambient brightness`).
+        void setAmbientScale(float scale) { mAmbientScale = scale; }
+
         /// Where the sky's sheets stand in the world's texture table, which a frame is described
         /// with (`Rtx::FrameRequest::mSky`): from `attach` to `detach`.
         const Rtx::SkyContent& getContent() const { return mSkyContent; }
@@ -137,5 +140,7 @@ namespace MWRender
         /// The water's scattering albedo, `Water_UnderwaterColor` at `Water_UnderwaterColorWeight`,
         /// read once: `WATER_SCATTER_SHIPPED` says what it is.
         osg::Vec3f mWaterScatter;
+
+        float mAmbientScale = 1.0f;
     };
 }

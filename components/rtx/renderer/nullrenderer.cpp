@@ -179,6 +179,36 @@ namespace Rtx
         mProfile.mReconstruction.mSampling.mBounceRays = rays;
     }
 
+    void NullRenderer::setDirectLampRays(const std::uint32_t rays)
+    {
+        assert(rays >= 1 && rays <= Shaders::MAX_DIRECT_LAMP_RAYS);
+        mProfile.mReconstruction.mSampling.mDirectLampRays = rays;
+    }
+
+    void NullRenderer::setShadowFloor(const float floor)
+    {
+        assert(floor >= 0.0f && floor <= 0.25f && std::isfinite(floor));
+        mProfile.mReconstruction.mSampling.mShadowFloor = floor;
+    }
+
+    void NullRenderer::setLampFalloff(const float falloff)
+    {
+        assert(falloff >= 0.5f && falloff <= 3.0f && std::isfinite(falloff));
+        mProfile.mReconstruction.mSampling.mLampFalloff = falloff;
+    }
+
+    void NullRenderer::setIndirectBrightness(const float brightness)
+    {
+        assert(brightness >= 0.0f && brightness <= 2.0f && std::isfinite(brightness));
+        mProfile.mReconstruction.mSampling.mIndirectBrightness = brightness;
+    }
+
+    void NullRenderer::setEmissiveBounce(const float bounce)
+    {
+        assert(bounce >= 0.0f && bounce <= 2.0f && std::isfinite(bounce));
+        mProfile.mReconstruction.mSampling.mEmissiveBounce = bounce;
+    }
+
     FrameTraced NullRenderer::renderFrame(const FrameRequest& request)
     {
         assert(mWorld.mIdentity != 0 && "a frame traced before the world's scene was set");
