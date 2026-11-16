@@ -658,7 +658,8 @@ namespace MWRender
         }
     }
 
-    osg::ref_ptr<osg::Image> RtxRenderer::readFrame(const int width, const int height, const Rtx::Channels channels)
+    osg::ref_ptr<osg::Image> RtxRenderer::readFrame(
+        const int width, const int height, const Rtx::Channels channels, const bool includeGui)
     {
         // A readback drains the queue, which a frame may not pay for and a stop or a loading
         // screen may.
@@ -668,7 +669,10 @@ namespace MWRender
         if (extents.mOutputWidth == 0 || extents.mOutputHeight == 0)
             return nullptr;
 
-        mRenderer->readPixels(mReadBack);
+        if (includeGui)
+            mRenderer->readShownPixels(mReadBack);
+        else
+            mRenderer->readPixels(mReadBack);
 
         const Rtx::TracedFrame frame{
             .mWidth = extents.mOutputWidth,
@@ -694,8 +698,9 @@ namespace MWRender
     {
         mPhase.expect(Phase::Between, Phase::Run);
         // Three channels, as the rasterizer reads its screenshots: the JPEG writer `screenshot
-        // format` may name refuses four (`Rtx::Channels::Rgb`).
-        const osg::ref_ptr<osg::Image> taken = readFrame(0, 0, Rtx::Channels::Rgb);
+        // format` may name refuses four (`Rtx::Channels::Rgb`). Includes the interface, matching
+        // `GlRenderer::saveScreenshot`.
+        const osg::ref_ptr<osg::Image> taken = readFrame(0, 0, Rtx::Channels::Rgb, true);
         if (taken == nullptr)
         {
             Log(Debug::Warning) << "Ray tracing has no frame to write a screenshot from";

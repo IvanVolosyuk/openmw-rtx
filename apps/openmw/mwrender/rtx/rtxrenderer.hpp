@@ -337,7 +337,8 @@ namespace MWRender
         /// The frame as it stands, as an image `width` by `height` — the frame's own size at nought
         /// — or null before anything was presented. Bottom row first, because every reader here
         /// takes OpenGL's order: `LoadingScreen` inverts V for it, and `osgDB`'s writers expect it.
-        osg::ref_ptr<osg::Image> readFrame(int width = 0, int height = 0, Rtx::Channels channels = Rtx::Channels::Rgba);
+        osg::ref_ptr<osg::Image> readFrame(
+            int width = 0, int height = 0, Rtx::Channels channels = Rtx::Channels::Rgba, bool includeGui = false);
 
         Rtx::Stepped<Phase> mPhase{ Phase::Between };
 
