@@ -23,7 +23,9 @@
 #include <osgParticle/ParticleSystem>
 #include <osgParticle/ParticleSystemUpdater>
 
+#include <components/misc/constants.hpp>
 #include <components/misc/result.hpp>
+#include <components/misc/strings/algorithm.hpp>
 #include <components/nifosg/autotransform.hpp>
 #include <components/rtx/common/finite.hpp>
 #include <components/rtx/common/runs.hpp>
@@ -205,6 +207,9 @@ namespace Rtx
         /// down from the group the game marked (`SceneUtil::LampBody`) as the class is.
         bool mLampBody = false;
 
+        /// Whether traversal is currently inside a `NightDaySwitch` node.
+        bool mNightDaySwitch = false;
+
         /// `SceneExtractor::setJumped`, read once at `begin`.
         std::span<const osg::Node* const> mJumped;
 
@@ -296,6 +301,7 @@ namespace Rtx
         mInside = {};
         mJumping = false;
         mLampBody = false;
+        mNightDaySwitch = false;
         mFreezes = freezes;
         mChangeable = false;
 
@@ -414,7 +420,11 @@ namespace Rtx
         const std::optional<std::size_t> outerEffect = mInside.mEffect;
         const bool outerJumping = mJumping;
         const bool outerLampBody = mLampBody;
+        const bool outerNightDaySwitch = mNightDaySwitch;
         mJumping = jumps(node);
+
+        if (node.asSwitch() != nullptr && Misc::StringUtils::ciEqual(node.getName(), Constants::NightDayLabel))
+            mNightDaySwitch = true;
 
         // **The model of a light, where the game hung one** (`SceneUtil::addLight`): every drawable
         // under the marked group, the paper beside the `AttachLight` node as well as anything under
@@ -445,6 +455,7 @@ namespace Rtx
         mInside.mEffect = outerEffect;
         mJumping = outerJumping;
         mLampBody = outerLampBody;
+        mNightDaySwitch = outerNightDaySwitch;
         mPathHash = above;
         --mDepth;
         mShading.resize(held);
@@ -458,6 +469,21 @@ namespace Rtx
     /// system that comes back on after an hour is handed the hour in one step, as under a cull.
     void SceneExtractor::Traversal::descend(osg::Node& node, const NodeKind kind)
     {
+        // Keep interior window panes active through dusk, dawn, and inclement weather by following
+        // the `INT-DAY` branch (child 2) of `NightDaySwitch` regardless of the binary switch state;
+        // radiance scaling in `SkyReader` handles smooth day/twilight/night fades without popping.
+        if (mExtractor.mInteriorWindowPortals && mNightDaySwitch)
+        {
+            if (osg::Switch* branches = node.asSwitch();
+                branches != nullptr && Misc::StringUtils::ciEqual(node.getName(), Constants::NightDayLabel)
+                && branches->getNumChildren() > 2)
+            {
+                mChildIndex = 2;
+                branches->getChild(2)->accept(*this);
+                return;
+            }
+        }
+
         descendInWorld(
             node, kind, *this, [this](osg::Sequence& frames) { frames.traverse(mSequenceClock); },
             [this](const unsigned int child) { mChildIndex = child; });
@@ -591,8 +617,8 @@ namespace Rtx
         if (const osg::StateSet* own = drawable.getStateSet())
             pushOwnShading(own, mExtractor.animate(drawable, placement));
 
-        mChangeable |= mExtractor.addDrawable(
-            drawable, placement, mShading, placed(), mClass, mInside, mJumping, mLampBody, getNodePath());
+        mChangeable |= mExtractor.addDrawable(drawable, placement, mShading, placed(), mClass, mInside, mJumping,
+            mLampBody, mNightDaySwitch, getNodePath());
 
         mShading.resize(held);
     }
@@ -866,7 +892,7 @@ namespace Rtx
 
     bool SceneExtractor::addDrawable(const osg::Drawable& drawable, const std::size_t who,
         const std::span<const Shading> shading, const osg::Matrixf& place, const InstanceClass what, WalkGlows& glows,
-        const bool jumped, const bool lampBody, const std::span<osg::Node* const> path)
+        const bool jumped, const bool lampBody, const bool nightDaySwitch, const std::span<osg::Node* const> path)
     {
         ExtractionStats& stats = mPass.getStats();
 
@@ -915,6 +941,23 @@ namespace Rtx
 
         const MaterialResolver::Resolved material = water ? mMaterials.resolveWater() : mMaterials.resolve(shading);
 
+        const Material* const resolvedMaterial
+            = material.mIndex != sNoIndex ? &mScene.materials().getRows()[material.mIndex] : nullptr;
+
+        // Suppress interior sunray cone geometry under NightDaySwitch: Glow in the Dahrk's `Tri Rays`
+        // cones use standard alpha blending (`SRC_ALPHA, ONE_MINUS_SRC_ALPHA`, flags 0x10ED) and other
+        // mods use additive blending (`SRC_ALPHA, ONE`); both have `isBlended() == true`, while actual
+        // window panes are opaque (or cutout) and emissive.
+        const bool suppressWindowCone
+            = mInteriorWindowPortals && nightDaySwitch && resolvedMaterial != nullptr && resolvedMaterial->isBlended();
+        if (suppressWindowCone)
+            return changes;
+
+        const bool emissive = resolvedMaterial != nullptr
+            && (resolvedMaterial->mEmissive != sNoIndex || resolvedMaterial->mEmissiveColour.x() > 0.0f
+                || resolvedMaterial->mEmissiveColour.y() > 0.0f || resolvedMaterial->mEmissiveColour.z() > 0.0f);
+        const bool windowPortal = mInteriorWindowPortals && nightDaySwitch && !water && !lampBody && emissive;
+
         // The slot this placement has held since it first appeared, so a world that stands
         // still writes nothing: the scene already knows where everything is, and only a transform
         // that differs from the one in the slot costs anything at all.
@@ -933,6 +976,7 @@ namespace Rtx
             .mClass = what,
             .mClockwise = !shading.empty() && shading.back().mClockwise,
             .mLampBody = lampBody,
+            .mWindowPortal = windowPortal,
         };
 
         ++stats.mInstances;
@@ -964,7 +1008,7 @@ namespace Rtx
         const MeshInstance& standing = mScene.placements().getRows()[slot].mInstance;
         if (standing.mMesh != resolved.mMesh || standing.mMaterial != resolved.mMaterial
             || standing.mClass != resolved.mClass || standing.mClockwise != resolved.mClockwise
-            || standing.mLampBody != resolved.mLampBody)
+            || standing.mLampBody != resolved.mLampBody || standing.mWindowPortal != resolved.mWindowPortal)
         {
             mScene.dropInstance(slot, Stander::Walk);
             slot = mScene.addInstance(resolved);

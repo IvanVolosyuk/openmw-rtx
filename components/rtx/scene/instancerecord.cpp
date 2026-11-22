@@ -125,6 +125,7 @@ namespace Rtx
                 .mTwoSided = worn.mTwoSided || shape.mFolded || shape.mPocketed,
                 .mFlipFacing = instance.mClockwise != mirrors(placement),
                 .mLampBody = instance.mLampBody,
+                .mWindowPortal = instance.mWindowPortal,
                 .mPlaced = true,
             };
         }

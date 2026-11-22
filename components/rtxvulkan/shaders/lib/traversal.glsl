@@ -13,9 +13,11 @@
 
 #include "shared/traceconstants.h"
 
+#include "colour.h"
 #include "gbuffer.h"
 #include "look.h"
 #include "scene.h"
+#include "sky.h"
 #include "shared/ground.h"
 #include "basis.glsl"
 #include "bindings.glsl"
@@ -458,13 +460,16 @@ struct SceneAnswer
     /// The committed instance's material kind, `KIND_WATER` and the rest: the shader-table offset
     /// `SceneAcceleration::placeRow` writes, read back.
     uint mKind;
+
+    /// Non-zero when the committed triangle was hit on its front face.
+    uint mFrontFace;
 };
 
 /// What a step that asked no ray is handed in place of an answer: nothing committed, and nothing
 /// walked past.
 SceneAnswer unansweredScene()
 {
-    return SceneAnswer(0u, 0.0, 0u, 0u, 0u, vec2(0.0), 0u);
+    return SceneAnswer(0u, 0.0, 0u, 0u, 0u, vec2(0.0), 0u, 0u);
 }
 
 /// **The one traversal loop**, which every query in this file runs through: AMD's Windows compiler writes a
@@ -517,6 +522,7 @@ SceneAnswer queryScene(SceneQuery asked)
         answer.mPrimitive = rayQueryGetIntersectionPrimitiveIndexEXT(query, true);
         answer.mBary = rayQueryGetIntersectionBarycentricsEXT(query, true);
         answer.mKind = rayQueryGetIntersectionInstanceShaderBindingTableRecordOffsetEXT(query, true);
+        answer.mFrontFace = rayQueryGetIntersectionFrontFaceEXT(query, true) ? 1u : 0u;
     }
     return answer;
 }
@@ -530,6 +536,7 @@ struct RayAsk
 {
     bool mTraced;
     bool mResolved;
+    bool mPortal;
     SceneQuery mQuery;
 };
 
@@ -538,6 +545,7 @@ struct RayAsk
 struct RayAnswer
 {
     bool mTraced;
+    bool mPortal;
     SceneAnswer mMet;
 };
 
@@ -547,26 +555,27 @@ const uint RUN_IDLE = 0u;
 
 RayAsk noRay()
 {
-    return RayAsk(false, false, SceneQuery(vec3(0.0), 0.0, vec3(0.0, 0.0, 1.0), 0.0, 0u, 0u, 0u, 0u, 0.0, 0.0, 0u, 0u));
+    return RayAsk(false, false, false,
+        SceneQuery(vec3(0.0), 0.0, vec3(0.0, 0.0, 1.0), 0.0, 0u, 0u, 0u, 0u, 0.0, 0.0, 0u, 0u));
 }
 
 RayAsk rayOf(SceneQuery query)
 {
-    return RayAsk(true, false, query);
+    return RayAsk(true, false, false, query);
 }
 
 /// `query`, with what it meets resolved (`resolveAsked`).
 RayAsk resolvedRayOf(SceneQuery query)
 {
-    return RayAsk(true, true, query);
+    return RayAsk(true, true, false, query);
 }
 
 /// Traces `asked` where it asks a ray, and answers it: a request's synchronous form, for an asker
 /// that waits on its one ray where it stands.
 RayAnswer answerAsked(RayAsk asked)
 {
-    return asked.mTraced ? RayAnswer(true, queryScene(asked.mQuery))
-                         : RayAnswer(false, unansweredScene());
+    return asked.mTraced ? RayAnswer(true, asked.mPortal, queryScene(asked.mQuery))
+                         : RayAnswer(false, asked.mPortal, unansweredScene());
 }
 
 /// The triangle a traversal committed, placed in the world, before any material is read off it.
@@ -822,11 +831,87 @@ RayAsk passageAsk(vec3 from, vec3 towards, float distance, uint faces, bool near
         solidMask(frame.mRayMask) | MASK_MEDIUM, MEET_WALK_PAST, 0u, 0.0, 0.0, 0u, 0u));
 }
 
+/// Estimates window glass transmittance vs opaque lead/wood mullion bars from a window texel.
+float windowGlassMask(vec3 rgb)
+{
+    return smoothstep(WINDOW_MULLION_LOW, WINDOW_MULLION_HIGH, dot(rgb, LUMINANCE_WEIGHTS));
+}
+
+/// Samples an interior `INSTANCE_WINDOW_PORTAL` hit to transmit sunlight through glass while letting
+/// dark mullions and frames cast shadows.
+float windowPortalTransmittance(SceneAnswer met)
+{
+    const GpuInstance inst = instanceAt(met.mInstance);
+    const GpuMesh mesh = meshAt(inst.mMesh);
+    const GpuMaterial mat = materialAt(inst.mMaterial);
+    const bool useEmissive = holdsTexture(mat.mEmissive);
+    const uint tex = useEmissive ? mat.mEmissive : mat.mDiffuse;
+    if (!holdsTexture(tex))
+        return 1.0;
+
+    const uvec3 corners = triangleCorners(mesh, met.mPrimitive);
+    vec2 uv[3];
+    vec4 transform = mat.mTextureTransform;
+    const uint emissiveUnit = (mat.mFlags >> MATERIAL_EMISSIVE_UNIT_SHIFT) & MATERIAL_UNIT_MASK;
+    if (useEmissive && readsSecondUvs(mesh, emissiveUnit))
+    {
+        triangleSecondUvs(mesh, corners, uv);
+        transform = vec4(1.0, 1.0, 0.0, 0.0);
+    }
+    else
+        triangleUvs(corners, uv);
+
+    const vec2 uv0 = uv[0] * transform.xy + transform.zw;
+    const vec2 uv1 = uv[1] * transform.xy + transform.zw;
+    const vec2 uv2 = uv[2] * transform.xy + transform.zw;
+    const vec2 coord = acrossTriangle(uv0, uv1, uv2, met.mBary);
+    const vec3 texel = textureLod(textures[nonuniformEXT(tex)], coord, 1.0).rgb;
+    return windowGlassMask(texel);
+}
+
+/// Exterior sky and sun glow visible through an interior window portal along `direction`.
+vec3 windowSkyRadiance(vec3 direction)
+{
+    // Exterior sky light enters from the upper hemisphere (directly down to horizontal,
+    // i.e. ray `direction` from horizontal z = 0 up to zenith z = +1). Rays pointing down
+    // out the window toward exterior ground roll off to a soft ground-bounce fraction.
+    const float skyHemisphere = mix(0.15, 1.0, smoothstep(-0.20, 0.05, direction.z));
+    vec3 sky
+        = skyGradient(frame.mWindowSkyHorizon, frame.mWindowSkyZenith, frame.mSkyRamp, direction) * skyHemisphere;
+    if (frame.mInteriorSun != 0u)
+    {
+        const float sunCos = max(dot(direction, frame.mSun.mDirection), 0.0);
+        const float glow = 0.12 * pow(sunCos, 6.0) + 0.025 * sunCos;
+        sky += frame.mSun.mIrradiance * (glow * skyHemisphere);
+    }
+    return sky;
+}
+
 /// What a `passageAsk` met: open where it asked no ray.
 Passage passageAnswered(RayAnswer answered)
 {
     if (!answered.mTraced)
         return openPassage();
+
+    if (answered.mPortal)
+    {
+        // In an interior, escaping through an unmodeled wall/ceiling seam (`mCommitted == 0u`)
+        // must stay blocked; sunlight only enters through front-facing `INSTANCE_WINDOW_PORTAL` panes.
+        if (answered.mMet.mCommitted == 0u)
+            return Passage(0.0, 1.0, SHADOW_PENUMBRA_CLEAR);
+
+        const bool portal
+            = (instanceAt(answered.mMet.mInstance).mClass & INSTANCE_WINDOW_PORTAL) != 0u
+            && answered.mMet.mFrontFace != 0u;
+        if (!portal)
+            return Passage(0.0, 1.0, answered.mMet.mDistance);
+
+        const float glass = windowPortalTransmittance(answered.mMet);
+        if (glass <= 0.01)
+            return Passage(0.0, 1.0, answered.mMet.mDistance);
+
+        return Passage(1.0, glass * throughBlocked(answered.mMet.mBlocked), SHADOW_PENUMBRA_CLEAR);
+    }
 
     const bool stopped = answered.mMet.mCommitted != 0u;
     return Passage(stopped ? 0.0 : 1.0, stopped ? 1.0 : throughBlocked(answered.mMet.mBlocked),
@@ -1408,6 +1493,21 @@ Surface resolve(Hit hit, vec3 origin, vec3 direction, bool detailed)
     surface.mAlbedo = lit ? min(surface.mAlbedo + sheet / SUNLIT_WHITE, vec3(1.0)) : surface.mAlbedo;
     surface.mAmbientAlbedo
         = lit ? min(surface.mAmbientAlbedo + sheet / SUNLIT_WHITE, vec3(1.0)) : surface.mAmbientAlbedo;
+
+    // Replace hardcoded interior window glow with the live exterior sky & sun radiance modulated
+    // by glass vs leaded-mullion luminance.
+    if (frame.mInteriorWindow != 0u && (instance.mClass & INSTANCE_WINDOW_PORTAL) != 0u)
+    {
+        const vec3 glassSample
+            = holdsTexture(material.mEmissive) ? (surface.mEmitted / EMISSIVE_INTENSITY) : albedo;
+        const float lum = dot(glassSample, LUMINANCE_WEIGHTS);
+        const float glassMask = windowGlassMask(glassSample);
+        const vec3 glassTint = clamp(glassSample * (glassMask / max(lum, 0.15)), vec3(0.0), vec3(1.5));
+        surface.mEmissiveColour = vec3(0.0);
+        surface.mEmitted = windowSkyRadiance(direction) * glassTint;
+        surface.mAlbedo *= 1.0 - 0.85 * glassMask;
+        surface.mAmbientAlbedo *= 1.0 - 0.85 * glassMask;
+    }
 
     return surface;
 }

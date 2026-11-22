@@ -10,6 +10,7 @@
 #include <osg/MatrixTransform>
 #include <osg/Matrixd>
 #include <osg/Node>
+#include <osg/Switch>
 #include <osg/Vec3f>
 #include <osg/ref_ptr>
 
@@ -18,6 +19,7 @@
 #include <apps/components_tests/rtx/support/graph.hpp>
 #include <apps/openmw/mwrender/objectstorage.hpp>
 #include <apps/openmw/mwrender/rtx/mirrorknobs.hpp>
+#include <apps/openmw/mwrender/rtx/skyreader.hpp>
 #include <apps/openmw/mwrender/rtx/tracedterrain.hpp>
 #include <apps/openmw/mwrender/rtx/worldmirror.hpp>
 #include <apps/openmw/mwrender/sceneframe.hpp>
@@ -25,6 +27,7 @@
 #include <apps/openmw/mwrender/skystate.hpp>
 #include <apps/openmw/mwrender/vismask.hpp>
 #include <components/esm3/loadcell.hpp>
+#include <components/misc/constants.hpp>
 #include <components/nifosg/nifloader.hpp>
 #include <components/resource/bgsmfilemanager.hpp>
 #include <components/resource/imagemanager.hpp>
@@ -35,6 +38,8 @@
 #include <components/rtx/preprocess/contentpass.hpp>
 #include <components/rtx/preprocess/imagefactcache.hpp>
 #include <components/rtx/preprocess/threadcontent.hpp>
+#include <components/rtx/shaders/scene.h>
+#include <components/sceneutil/material.hpp>
 #include <components/vfs/manager.hpp>
 
 namespace MWRender
@@ -228,6 +233,65 @@ namespace MWRender
             NifOsg::Loader::setHiddenNodeMask(told);
 
             EXPECT_EQ(mask & Mask_UpdateVisitor, 0u) << "a node the content hid is walked";
+        }
+
+        TEST(RtxWorldMirrorTest, windowPortalLightsClusterSeparatedWindowsAndProjectInward)
+        {
+            const auto makeWindowQuad = [] {
+                osg::ref_ptr<osg::Geometry> quad = Rtx::Testing::makeQuad();
+                osg::StateSet& state = *quad->getOrCreateStateSet();
+                Rtx::Testing::paint(state, "textures/tx_window_diamond_01.dds");
+                osg::ref_ptr<SceneUtil::Material> mat = new SceneUtil::Material;
+                mat->setDiffuse(osg::Vec4f(1.0f, 1.0f, 1.0f, 1.0f));
+                mat->setEmission(osg::Vec4f(1.0f, 1.0f, 1.0f, 1.0f));
+                state.setAttribute(mat);
+                return quad;
+            };
+
+            TwoBodyFrame world;
+            world.mRoot->removeChildren(0, world.mRoot->getNumChildren());
+            world.mWorld.mLocation = Location::Interior;
+
+            osg::ref_ptr<osg::Group> intDay = new osg::Group;
+            osg::ref_ptr<osg::MatrixTransform> left
+                = new osg::MatrixTransform(osg::Matrix::scale(40.0, 40.0, 40.0) * osg::Matrix::translate(0.0, 0.0, 0.0));
+            osg::ref_ptr<osg::MatrixTransform> right
+                = new osg::MatrixTransform(osg::Matrix::scale(40.0, 40.0, 40.0) * osg::Matrix::translate(300.0, 0.0, 0.0));
+            left->addChild(makeWindowQuad());
+            right->addChild(makeWindowQuad());
+            intDay->addChild(left);
+            intDay->addChild(right);
+
+            osg::ref_ptr<osg::Switch> nightDay = new osg::Switch;
+            nightDay->setName(Constants::NightDayLabel);
+            nightDay->addChild(new osg::Group);
+            nightDay->addChild(new osg::Group);
+            nightDay->addChild(intDay);
+            nightDay->setSingleChildOn(2);
+            world.mRoot->addChild(nightDay);
+
+            WorldMirror mirror(MWRender::MirrorKnobs{ .mInteriorWindowSunlight = true });
+            const osg::Matrixd view = osg::Matrixd::identity();
+            mirror.mirror(world.frame(1), view);
+            ASSERT_EQ(mirror.getScene().placements().getCounts().mWindowPortals, 2u);
+
+            mirror.addWindowPortalLights(WindowPortalLighting{
+                .mActive = true,
+                .mSkyScatter = osg::Vec3f(1.0f, 2.0f, 3.0f),
+                .mSunDirection = osg::Vec3f(0.0f, 0.0f, -1.0f),
+                .mSunScatter = osg::Vec3f(4.0f, 0.0f, 0.0f),
+            });
+
+            const std::span<const Rtx::Light> lights = mirror.getScene().lights();
+            ASSERT_EQ(lights.size(), 2u);
+            for (const Rtx::Light& light : lights)
+            {
+                EXPECT_NE(light.mTraits & Rtx::Shaders::LIGHT_WINDOW, 0u);
+                EXPECT_FLOAT_EQ(light.mPosition.z(), 18.0f);
+                EXPECT_NEAR(light.mIntensity.x(), 5.0f * 1600.0f, 1.0f);
+                EXPECT_NEAR(light.mIntensity.y(), 2.0f * 1600.0f, 1.0f);
+                EXPECT_NEAR(light.mIntensity.z(), 3.0f * 1600.0f, 1.0f);
+            }
         }
     }
 }

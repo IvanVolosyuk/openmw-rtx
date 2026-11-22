@@ -30,6 +30,10 @@ namespace MWRender
                 .mDirectLampRays = 6,
                 .mShadowFloor = 0.05f,
                 .mAmbientScale = 0.25f,
+                .mInteriorWindowSunlight = false,
+                .mInteriorSunlightStrength = 1.5f,
+                .mInteriorWindowSkylight = 2.75f,
+                .mInteriorWindowGodrays = 2.25f,
                 .mLampFalloff = 1.65f,
                 .mLamps = {
                     .mSourceScale = 0.5f,
@@ -68,6 +72,11 @@ namespace MWRender
             EXPECT_EQ(derived.mDirectLampRays, 6u);
             EXPECT_EQ(derived.mShadowFloor, 0.05f);
             EXPECT_EQ(derived.mAmbientScale, 0.25f);
+            EXPECT_FALSE(derived.mInteriorWindowSunlight);
+            EXPECT_FALSE(derived.mMirror.mInteriorWindowSunlight);
+            EXPECT_FLOAT_EQ(derived.mInteriorSunlightStrength, 1.5f);
+            EXPECT_FLOAT_EQ(derived.mInteriorWindowSkylight, 2.75f);
+            EXPECT_FLOAT_EQ(derived.mInteriorWindowGodrays, 2.25f);
             EXPECT_FLOAT_EQ(derived.mLampFalloff, 1.65f);
             EXPECT_FLOAT_EQ(derived.mIndirectBrightness, 0.65f);
             EXPECT_FLOAT_EQ(derived.mEmissiveBounce, 0.1f);
@@ -248,6 +257,40 @@ namespace MWRender
                 const RtxSettings derivedGain = RtxSettings::derive(values);
                 EXPECT_FLOAT_EQ(derivedGain.mIndirectBrightness, gain);
                 EXPECT_FLOAT_EQ(derivedGain.mEmissiveBounce, gain);
+            }
+
+            for (const float scale :
+                { -0.01f, 30.01f, std::numeric_limits<float>::infinity(), std::numeric_limits<float>::quiet_NaN() })
+            {
+                RtxSettingValues sunValues = valid();
+                sunValues.mInteriorSunlightStrength = scale;
+                EXPECT_THROW(RtxSettings::derive(sunValues), Rtx::InputError) << scale;
+
+                RtxSettingValues skyValues = valid();
+                skyValues.mInteriorWindowSkylight = scale;
+                EXPECT_THROW(RtxSettings::derive(skyValues), Rtx::InputError) << scale;
+            }
+            for (const float scale :
+                { -0.01f, 3.01f, std::numeric_limits<float>::infinity(), std::numeric_limits<float>::quiet_NaN() })
+            {
+                RtxSettingValues rayValues = valid();
+                rayValues.mInteriorWindowGodrays = scale;
+                EXPECT_THROW(RtxSettings::derive(rayValues), Rtx::InputError) << scale;
+            }
+            for (const float scale : { 0.0f, 1.0f, 3.0f, 30.0f })
+            {
+                RtxSettingValues values = valid();
+                values.mInteriorSunlightStrength = scale;
+                values.mInteriorWindowSkylight = scale;
+                const RtxSettings derivedWindow = RtxSettings::derive(values);
+                EXPECT_FLOAT_EQ(derivedWindow.mInteriorSunlightStrength, scale);
+                EXPECT_FLOAT_EQ(derivedWindow.mInteriorWindowSkylight, scale);
+            }
+            for (const float scale : { 0.0f, 1.0f, 3.0f })
+            {
+                RtxSettingValues values = valid();
+                values.mInteriorWindowGodrays = scale;
+                EXPECT_FLOAT_EQ(RtxSettings::derive(values).mInteriorWindowGodrays, scale);
             }
         }
     }

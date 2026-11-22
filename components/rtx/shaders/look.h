@@ -1448,6 +1448,28 @@ namespace Rtx::Shaders
     /// swinging open is not a fade.
     const float FOG_VOLUME_HISTORY = 0.9f;
 
+    /// Depth reach of the froxel volume in interiors with active window portals, sizing slice
+    /// resolution for room-scale volumetric godrays (about 45 metres).
+    const float INTERIOR_FOG_REACH = 3200.0f;
+
+    /// Default indoor suspended-dust single-scattering extinction along sunlit window rays, so
+    /// sun shafts appear in rooms whose `AMBI` fog density is zero without greying out the room.
+    const float INTERIOR_DUST_EXTINCTION = 0.00055f;
+
+    /// Forward Henyey-Greenstein asymmetry and isotropic floor of indoor dust phase scattering.
+    const float INTERIOR_DUST_G = 0.55f;
+    const float INTERIOR_DUST_ISOTROPIC = 0.35f;
+
+    /// World-unit noise tile size for subtle indoor suspended-dust variations.
+    const float INTERIOR_DUST_TILE = 360.0f;
+
+    /// Skylight gain applied to indirect diffuse bounces landing on interior window portals.
+    const float WINDOW_SKY_BOUNCE_GAIN = 1.0f;
+
+    /// Diffuse texel luminance thresholds separating opaque window mullions from transmissive glass.
+    const float WINDOW_MULLION_LOW = 0.05f;
+    const float WINDOW_MULLION_HIGH = 0.30f;
+
 #ifdef RTX_HOST
 }
 #endif

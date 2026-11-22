@@ -1,3 +1,4 @@
+#include <cmath>
 #include <cstddef>
 #include <limits>
 
@@ -30,6 +31,7 @@
 #include <components/rtx/world/skycontent.hpp>
 #include <components/settings/values.hpp>
 #include <components/sky/skyclock.hpp>
+#include <components/sky/sundisc.hpp>
 #include <components/sky/sunglarefader.hpp>
 #include <components/vfs/manager.hpp>
 #include <components/vfs/pathutil.hpp>
@@ -439,6 +441,160 @@ namespace MWRender
                     << "nothing falling, setting " << shelters;
             }
             Settings::shaders().mWeatherParticleOcclusion.set(setting);
+        }
+
+        TEST(RtxReadWorldTest, interiorWindowLightingTransitionsSmoothlyThroughDawnAndDusk)
+        {
+            const auto rgb = [](float r, float g, float b) {
+                return osg::Vec4f(r / 255.0f, g / 255.0f, b / 255.0f, 1.0f);
+            };
+            const auto luminance = [](const osg::Vec3f& c) {
+                return 0.2126f * c.x() + 0.7152f * c.y() + 0.0722f * c.z();
+            };
+
+            Sky::TimeOfDaySettings times;
+            times.mNightStart = 20.0f;
+            times.mNightEnd = 6.0f;
+            times.mDayStart = 8.0f;
+            times.mDayEnd = 18.0f;
+            times.mSunriseDuration = 2.0f;
+            times.mStarsPostSunsetStart = 1.0f;
+            times.mStarsPreSunriseFinish = 2.0f;
+            times.mStarsFadingDuration = 2.0f;
+            times.mSunriseTransitions["Sky"] = { 0.5f, 1.0f, 1.5f, 0.5f };
+            times.mSunriseTransitions["Ambient"] = { 0.5f, 2.0f, 1.0f, 1.25f };
+            times.mSunriseTransitions["Fog"] = { 0.5f, 1.0f, 2.0f, 1.0f };
+            times.mSunriseTransitions["Sun"] = { 0.0f, 0.0f, 1.0f, 1.25f };
+
+            const Sky::TimeOfDayInterpolator<osg::Vec4f> skyColor(
+                rgb(117, 141, 164), rgb(95, 135, 203), rgb(56, 89, 129), rgb(9, 10, 11));
+            const Sky::TimeOfDayInterpolator<osg::Vec4f> fogColor(
+                rgb(255, 189, 157), rgb(206, 227, 255), rgb(255, 189, 157), rgb(9, 10, 11));
+            const Sky::TimeOfDayInterpolator<osg::Vec4f> ambientColor(
+                rgb(47, 66, 96), rgb(137, 140, 160), rgb(68, 75, 96), rgb(32, 35, 42));
+            const Sky::TimeOfDayInterpolator<osg::Vec4f> sunColor(
+                rgb(242, 159, 119), rgb(255, 252, 238), rgb(255, 114, 79), rgb(59, 97, 176));
+
+            SkyReader reader;
+            reader.setInteriorWindowSunlight(true);
+            reader.setInteriorWindowSkylight(30.0f);
+            reader.setInteriorSunlightStrength(10.0f);
+            const Falling falling;
+
+            const auto evalAt = [&](float hour) {
+                Standing s = standingIn(Location::Interior);
+                s.mSky.mTimes = times;
+                s.mSky.mExteriorValid = true;
+                s.mSky.mSunUp = Sky::sunUp(hour, times);
+                s.mWorld.mGameHour = hour;
+                s.mWorld.mRoom = ESM::Cell::AMBIstruct{
+                    .mAmbient = 0x00201818u,
+                    .mSunlight = 0x00403028u,
+                    .mFog = 0x00151510u,
+                    .mFogDensity = 0.5f,
+                };
+
+                float adjustedHour = hour < times.mNightEnd ? hour + 24.0f : hour;
+                const float dayDuration = times.mNightStart - times.mNightEnd;
+                const float nightDuration = 24.0f - dayDuration;
+                float orbit = 0.0f;
+                if (adjustedHour < times.mNightStart)
+                {
+                    const float t = (adjustedHour - times.mNightEnd) / dayDuration;
+                    orbit = 1.0f - 2.0f * t;
+                }
+                else
+                {
+                    const float t = (adjustedHour - times.mNightStart) / nightDuration;
+                    orbit = 2.0f * t - 1.0f;
+                }
+                s.mSky.mSunDirection = Sky::sunDirection(orbit);
+
+                s.mSky.mWeather.mSkyColor = skyColor.getValue(hour, times, "Sky");
+                s.mSky.mWeather.mFogColor = fogColor.getValue(hour, times, "Fog");
+                s.mSky.mWeather.mAmbientColor = ambientColor.getValue(hour, times, "Ambient");
+                s.mSky.mWeather.mSunColor = sunColor.getValue(hour, times, "Sun");
+                s.mSky.mWeather.mGlareView = 1.0f;
+                s.mSky.mWeather.mSunDiscColor = osg::Vec4f(1.0f, 1.0f, 1.0f, Sky::sunDiscAlpha(hour, times));
+
+                const Rtx::WorldReading reading = reader.read(s.mSky, s.mWorld, falling.mPrecipitation, 0.0, sReach, true);
+                const WindowPortalLighting portal = reader.readWindowPortalLighting(s.mWorld, s.mSky, true);
+                return std::pair{ reading, portal };
+            };
+
+            // Full night reaches exact zero even with skylight at 3000%.
+            for (float nightHour : { 0.0f, 5.0f, 5.5f, 21.0f })
+            {
+                const auto [reading, portal] = evalAt(nightHour);
+                EXPECT_TRUE(portal.mActive);
+                EXPECT_EQ(portal.mSkyScatter, osg::Vec3f()) << "hour " << nightHour;
+                EXPECT_EQ(portal.mSunScatter, osg::Vec3f()) << "hour " << nightHour;
+                ASSERT_TRUE(reading.mInteriorWindowSky.has_value());
+                EXPECT_EQ(reading.mInteriorWindowSky->mSun.mIrradiance, osg::Vec3f()) << "hour " << nightHour;
+            }
+
+            // Pre-dawn (05:45) and civil dusk (20:01, 20:30) deliver soft sky twilight with zero direct sun.
+            for (float twilightHour : { 5.75f, 20.0f + 1.0f / 60.0f, 20.5f })
+            {
+                const auto [reading, portal] = evalAt(twilightHour);
+                EXPECT_GT(luminance(portal.mSkyScatter), 0.0f) << "hour " << twilightHour;
+                EXPECT_EQ(portal.mSunScatter, osg::Vec3f()) << "hour " << twilightHour;
+                ASSERT_TRUE(reading.mInteriorWindowSky.has_value());
+                EXPECT_EQ(reading.mInteriorWindowSky->mSun.mIrradiance, osg::Vec3f()) << "hour " << twilightHour;
+            }
+
+            // Continuity across sunrise (05:59:59 -> 06:00:01) and sunset (19:59:59 -> 20:00:01): no switch cliff,
+            // and 2-minute steps across horizon remain a tiny fraction of daytime luminance.
+            const float noonLum = luminance(evalAt(12.0f).second.mSkyScatter);
+            const auto [dawnEdgeBefore, dawnEdgePortalBefore] = evalAt(6.0f - 1.0f / 3600.0f);
+            const auto [dawnEdgeAfter, dawnEdgePortalAfter] = evalAt(6.0f + 1.0f / 3600.0f);
+            const float dawnEdgeJump
+                = std::abs(luminance(dawnEdgePortalAfter.mSkyScatter) - luminance(dawnEdgePortalBefore.mSkyScatter))
+                / std::max(luminance(dawnEdgePortalBefore.mSkyScatter), 1e-4f);
+            EXPECT_LT(dawnEdgeJump, 0.01f);
+
+            const auto [duskEdgeBefore, duskEdgePortalBefore] = evalAt(20.0f - 1.0f / 3600.0f);
+            const auto [duskEdgeAfter, duskEdgePortalAfter] = evalAt(20.0f + 1.0f / 3600.0f);
+            const float duskEdgeJump
+                = std::abs(luminance(duskEdgePortalBefore.mSkyScatter) - luminance(duskEdgePortalAfter.mSkyScatter))
+                / std::max(luminance(duskEdgePortalBefore.mSkyScatter), 1e-4f);
+            EXPECT_LT(duskEdgeJump, 0.01f);
+
+            const auto [dawnBefore, dawnPortalBefore] = evalAt(5.0f + 59.0f / 60.0f);
+            const auto [dawnAfter, dawnPortalAfter] = evalAt(6.0f + 1.0f / 60.0f);
+            const float dawnStepVsNoon
+                = std::abs(luminance(dawnPortalAfter.mSkyScatter) - luminance(dawnPortalBefore.mSkyScatter)) / noonLum;
+            EXPECT_LT(dawnStepVsNoon, 0.05f);
+            EXPECT_LT(luminance(dawnAfter.mInteriorWindowSky->mSun.mIrradiance),
+                0.01f * luminance(evalAt(12.0f).first.mInteriorWindowSky->mSun.mIrradiance));
+
+            const auto [duskBefore, duskPortalBefore] = evalAt(19.0f + 59.0f / 60.0f);
+            const auto [duskAfter, duskPortalAfter] = evalAt(20.0f + 1.0f / 60.0f);
+            const float duskDrop
+                = std::abs(luminance(duskPortalBefore.mSkyScatter) - luminance(duskPortalAfter.mSkyScatter))
+                / std::max(luminance(duskPortalBefore.mSkyScatter), 1e-4f);
+            EXPECT_LT(duskDrop, 0.15f);
+            EXPECT_LT(luminance(duskBefore.mInteriorWindowSky->mSun.mIrradiance),
+                0.01f * luminance(evalAt(12.0f).first.mInteriorWindowSky->mSun.mIrradiance));
+
+            // Monotonic increase across dawn and decrease across dusk.
+            EXPECT_LT(luminance(evalAt(5.5f).second.mSkyScatter), luminance(evalAt(5.75f).second.mSkyScatter));
+            EXPECT_LT(luminance(evalAt(5.75f).second.mSkyScatter), luminance(evalAt(6.0f).second.mSkyScatter));
+            EXPECT_LT(luminance(evalAt(6.0f).second.mSkyScatter), luminance(evalAt(6.5f).second.mSkyScatter));
+            EXPECT_LT(luminance(evalAt(6.5f).second.mSkyScatter), luminance(evalAt(7.0f).second.mSkyScatter));
+
+            EXPECT_GT(luminance(evalAt(18.5f).second.mSkyScatter), luminance(evalAt(19.5f).second.mSkyScatter));
+            EXPECT_GT(luminance(evalAt(19.5f).second.mSkyScatter), luminance(duskPortalAfter.mSkyScatter));
+            EXPECT_GT(luminance(duskPortalAfter.mSkyScatter), luminance(evalAt(20.5f).second.mSkyScatter));
+            EXPECT_GT(luminance(evalAt(20.5f).second.mSkyScatter), luminance(evalAt(21.0f).second.mSkyScatter));
+
+            // Late-sunset sunlight (19:45) remains warm amber/orange rather than turning blue.
+            const auto [lateSunset, latePortal] = evalAt(19.75f);
+            ASSERT_TRUE(lateSunset.mInteriorWindowSky.has_value());
+            const osg::Vec3f& sunsetSun = lateSunset.mInteriorWindowSky->mSun.mIrradiance;
+            EXPECT_GT(sunsetSun.x(), sunsetSun.y());
+            EXPECT_GT(sunsetSun.y(), sunsetSun.z());
+            EXPECT_GT(latePortal.mSunScatter.x(), latePortal.mSunScatter.z());
         }
     }
 }

@@ -132,6 +132,9 @@ namespace MWRender
         /// weather's.
         std::optional<ESM::Cell::AMBIstruct> mRoom;
 
+        /// Interior cell's NorthMarker yaw in radians (`northmarker` rot[2]), zero if absent or outdoors.
+        float mNorthMarkerYaw = 0.0f;
+
         float mGameHour = 0.0f;
 
         /// Which child every `NightDaySwitch` of the world's objects shows, `World::getNightDayMode`,

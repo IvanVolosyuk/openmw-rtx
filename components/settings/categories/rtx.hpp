@@ -24,6 +24,13 @@ namespace Settings
         SettingValue<int> mEmptyLampSourceSize{ mIndex, "RTX", "empty lamp source size",
             makeClampSanitizerInt(25, 400) };
         SettingValue<int> mAmbientBrightness{ mIndex, "RTX", "ambient brightness", makeClampSanitizerInt(0, 200) };
+        SettingValue<bool> mInteriorWindowSunlight{ mIndex, "RTX", "interior window sunlight" };
+        SettingValue<int> mInteriorSunlightStrength{ mIndex, "RTX", "interior sunlight strength",
+            makeClampSanitizerInt(0, 3000) };
+        SettingValue<int> mInteriorWindowSkylight{ mIndex, "RTX", "interior window skylight",
+            makeClampSanitizerInt(0, 3000) };
+        SettingValue<int> mInteriorWindowGodrays{ mIndex, "RTX", "interior window godrays",
+            makeClampSanitizerInt(0, 300) };
 
         /// The most cells `distant land cells` takes: a bound on how much world a frame is asked to
         /// stand, and so on what the ring's ask costs. Nought stays nought, which hands the reach

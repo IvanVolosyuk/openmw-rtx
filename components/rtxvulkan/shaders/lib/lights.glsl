@@ -55,7 +55,10 @@ RayAsk skyAsk(SkySource sky, vec3 position, vec3 step, vec2 draw, bool nearest)
         return noRay();
 
     const vec3 towards = coneDirection(sky.mDirection, sky.mLimb, draw);
-    return skyLightAsk(leaveSurface(position, step, towards), towards, frame.mReach, nearest);
+    const bool portal = frame.mInteriorSun != 0u;
+    RayAsk ask = skyLightAsk(leaveSurface(position, step, towards), towards, frame.mReach, nearest || portal);
+    ask.mPortal = portal;
+    return ask;
 }
 
 /// The same, traced at once and read as one number: the product `throughAnswered` makes of its
@@ -147,14 +150,19 @@ float lampSoftening(float source)
 const float LAMP_FALLOFF_ANCHOR_SQ = 112.0 * 112.0 + 40.0 * 40.0;
 const float LAMP_FALLOFF_CORE_SQ = 40.0 * 40.0;
 
-/// How much of a light `distance` away arrives, per unit intensity.
-float falloff(float distance, float reach, float source)
+float falloffBase(float distance, float reach, float source)
 {
     const float ratio = distance / reach;
     const float window = clamp(1.0 - ratio * ratio * ratio * ratio, 0.0, 1.0);
     const float held = lampSoftening(source);
 
-    float base = window * window / (distance * distance + held * held);
+    return window * window / (distance * distance + held * held);
+}
+
+/// How much of a light `distance` away arrives, per unit intensity.
+float falloff(float distance, float reach, float source)
+{
+    float base = falloffBase(distance, reach, source);
     if (frame.mLampFalloffOffset != 0.0)
         base *= pow(LAMP_FALLOFF_ANCHOR_SQ / (distance * distance + LAMP_FALLOFF_CORE_SQ), frame.mLampFalloffOffset);
     return base;
@@ -247,8 +255,11 @@ Lamp lampAt(GpuLight lamp, vec3 position)
         return Lamp(vec3(0.0), 0.0, 0.0);
 
     const float distance = sqrt(squared);
+    const float reaching = (lamp.mTraits & LIGHT_WINDOW) != 0u
+        ? falloffBase(distance, lamp.mReach, lamp.mSourceRadius)
+        : falloff(distance, lamp.mReach, lamp.mSourceRadius);
 
-    return Lamp(offset / distance, falloff(distance, lamp.mReach, lamp.mSourceRadius), distance);
+    return Lamp(offset / distance, reaching, distance);
 }
 
 /// One lamp held out of all the ones that could reach a point, and what it stands for.

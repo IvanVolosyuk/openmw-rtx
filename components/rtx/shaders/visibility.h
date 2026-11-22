@@ -518,7 +518,17 @@ namespace Rtx::Shaders
         /// Zero-centred gain offset applied to emissive surface glow at bounce landings (`mEmissiveBounce - 1.0`).
         float mEmissiveBounceOffset RTX_ZERO;
 
-        uint mLightingPad RTX_ZERO;
+        /// Non-zero when interior window portals are active (day, overcast, or night).
+        uint mInteriorWindow RTX_ZERO;
+
+        /// Exterior sky gradient shown through interior window portals and indoor dust extinction
+        /// along sunlit window beams.
+        vec3 mWindowSkyHorizon RTX_ZERO;
+        float mInteriorDust RTX_ZERO;
+        vec3 mWindowSkyZenith RTX_ZERO;
+
+        /// Non-zero when direct sunlight enters an interior through `INSTANCE_WINDOW_PORTAL` panes.
+        uint mInteriorSun RTX_ZERO;
 
         /// Where every table a hit reads is. `GpuTables` says why it rides here.
         ///
@@ -563,8 +573,8 @@ namespace Rtx::Shaders
 
     // Pinned for the reason `scene.h` gives: the side that writes these bytes and the side that
     // reads them are different compilers.
-    static_assert(offsetof(VisibilityConstants, mTables) == 1488, "GpuTables must land eight-aligned");
-    static_assert(sizeof(VisibilityConstants) == 1696, "VisibilityConstants must be scalar-packed on every side");
+    static_assert(offsetof(VisibilityConstants, mTables) == 1520, "GpuTables must land eight-aligned");
+    static_assert(sizeof(VisibilityConstants) == 1728, "VisibilityConstants must be scalar-packed on every side");
     static_assert(sizeof(PuffConstants) == 152, "PuffConstants must be scalar-packed on every side");
 #endif
 

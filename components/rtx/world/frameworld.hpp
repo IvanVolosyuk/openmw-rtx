@@ -20,6 +20,16 @@
 
 namespace Rtx
 {
+    /// Exterior sky and sun state projected into an interior room's window portals at room exposure
+    /// scale (without `DAYLIGHT_GAIN`).
+    struct InteriorWindowSky
+    {
+        Sun mSun{};
+        osg::Vec3f mSkyHorizon{};
+        osg::Vec3f mSkyZenith{};
+        float mDust = 0.0f;
+    };
+
     /// What a frame's sky, air and water are, as far as neither host can work it out for the other:
     /// a `Daylight` and the handful of things a `Daylight` does not carry.
     struct WorldReading
@@ -77,6 +87,9 @@ namespace Rtx
         /// it to every fragment it lights, where nothing occludes it and no exposure adapts it away,
         /// and the display chain adds it after the meter for that reason.
         osg::Vec3f mNightEye{};
+
+        /// Exterior sky and sun projected into interior `INSTANCE_WINDOW_PORTAL` panes, if active.
+        std::optional<InteriorWindowSky> mInteriorWindowSky;
     };
 
     /// What a frame's world decides beside its block: what the display chain washes and lifts the

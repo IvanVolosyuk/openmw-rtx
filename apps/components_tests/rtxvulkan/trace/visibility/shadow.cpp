@@ -1159,5 +1159,64 @@ namespace Rtx::Testing
                     fullGlowBounce.mRadiance[centre + 0] * 0.02f);
             }
         }
+
+        /// Interior window portals let sunlight illuminate the floor through front-facing glass,
+        /// cast shadows from solid interior occluders, block sunlight through unmodeled wall gaps
+        /// (`mCommitted == 0`), and scatter volumetric dust beams when `mInteriorDust > 0`.
+        TEST_F(RtxVisibilityTest, interiorWindowPortalLightsFloorThroughWindowAndBlocksWallSeams)
+        {
+            constexpr std::uint32_t size = 64;
+            SceneDesc scene;
+            // Floor at z = 0, facing +Z. No side walls exist in this open shell, so any ray missing
+            // the window portal escapes to `mCommitted == 0` and must remain unlit.
+            addQuad(scene, sheetAt(400.0f, 0.0f));
+
+            // Window portal at y = 150, centred at (x = 0, z = 120), 120x120 units, facing -Y into the room.
+            const Index windowMesh = addQuadMesh(scene, uprightQuadAt(60.0f, 150.0f, osg::Vec2f(0.0f, 120.0f)));
+            const Index windowMat = scene.addMaterial(Material{ .mDiffuseColour = osg::Vec3f(0.9f, 0.9f, 0.9f) });
+            scene.addInstance(MeshInstance{ .mMesh = windowMesh, .mMaterial = windowMat, .mWindowPortal = true });
+
+            // Solid interior bar occluding the left side of the window (x in [-45, -15], y = 120).
+            addQuad(scene, uprightQuadAt(15.0f, 120.0f, osg::Vec2f(-30.0f, 90.0f)));
+
+            // Look from (0, -240, 200) toward (0, 20, 0) so both the sunlit floor patch under the
+            // right side of the window and the open floor seam outside x > 80 are visible.
+            Shaders::VisibilityConstants camera = Testing::makeCamera(
+                osg::Vec3f(0.0f, -240.0f, 200.0f), osg::Vec3f(0.0f, 20.0f, 0.0f), 60.0f, size, size, 100000.0f);
+            osg::Vec3f sunDir(0.0f, 1.0f, 1.0f);
+            sunDir.normalize();
+            camera.mSun = Shaders::sunSource(sunDir, osg::Vec3f(2.0f, 2.0f, 2.0f));
+            camera.mSkyHorizon = osg::Vec3f();
+            camera.mSkyZenith = osg::Vec3f();
+            camera.mAmbient = osg::Vec3f();
+            camera.mSurfaceAmbient = osg::Vec3f();
+            camera.mInteriorWindow = 1u;
+            camera.mInteriorSun = 1u;
+            camera.mInteriorDust = Shaders::INTERIOR_DUST_EXTINCTION;
+            camera.mWindowSkyHorizon = osg::Vec3f(0.25f, 0.35f, 0.45f);
+            camera.mWindowSkyZenith = osg::Vec3f(0.15f, 0.35f, 0.65f);
+
+            const Frame frame = shoot(scene, {}, camera, size, { .mIndirect = false });
+            std::vector<float> shadowed;
+            mProbe.readChannel(Channel::Shadowed, shadowed);
+            ASSERT_EQ(shadowed.size(), std::size_t{ size } * size * 4);
+
+            std::size_t litPixels = 0;
+            std::size_t seamBlockedPixels = 0;
+            for (std::uint32_t y = 0; y < size; ++y)
+            {
+                for (std::uint32_t x = 0; x < size; ++x)
+                {
+                    const std::size_t idx = (std::size_t{ y } * size + x) * 4;
+                    if (shadowed[idx] > 0.0f)
+                        ++litPixels;
+                    else
+                        ++seamBlockedPixels;
+                }
+            }
+            EXPECT_GT(litPixels, 20u) << "sunlight must enter through the interior window portal";
+            EXPECT_GT(seamBlockedPixels, 200u) << "rays escaping past the window must stay blocked";
+            EXPECT_GT(frame.mHits, 0u);
+        }
     }
 }

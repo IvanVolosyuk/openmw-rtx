@@ -195,6 +195,10 @@ namespace MWRender
                 },
                 .mMirror = settings.mMirror,
                 .mAmbientScale = settings.mAmbientScale,
+                .mInteriorWindowSunlight = settings.mInteriorWindowSunlight,
+                .mInteriorSunlightStrength = settings.mInteriorSunlightStrength,
+                .mInteriorWindowSkylight = settings.mInteriorWindowSkylight,
+                .mInteriorWindowGodrays = settings.mInteriorWindowGodrays,
                 .mBackend = backend,
                 .mHeadless = backend == RtxBackend::Null,
                 .mSettled = std::nullopt,
@@ -219,6 +223,10 @@ namespace MWRender
     {
         mSettled = setup.mSettled;
         mSky.setAmbientScale(setup.mAmbientScale);
+        mSky.setInteriorWindowSunlight(setup.mInteriorWindowSunlight);
+        mSky.setInteriorSunlightStrength(setup.mInteriorSunlightStrength);
+        mSky.setInteriorWindowSkylight(setup.mInteriorWindowSkylight);
+        mSky.setInteriorWindowGodrays(setup.mInteriorWindowGodrays);
 
         // **Made here, because there is no viewer to make them.** Every renderer needs the four and
         // one built on `osgViewer` gets them already wired together.
@@ -773,13 +781,17 @@ namespace MWRender
         const bool indirectLimit = changed.contains({ "RTX", "indirect brightness limit" });
         const bool indirectBrightness = changed.contains({ "RTX", "indirect brightness" });
         const bool emissiveBounce = changed.contains({ "RTX", "emissive bounce" });
+        const bool interiorWindow = changed.contains({ "RTX", "interior window sunlight" });
+        const bool interiorSun = changed.contains({ "RTX", "interior sunlight strength" });
+        const bool interiorSkylight = changed.contains({ "RTX", "interior window skylight" });
+        const bool interiorGodrays = changed.contains({ "RTX", "interior window godrays" });
         const bool reach
             = changed.contains({ "RTX", "distant land cells" }) || changed.contains({ "Camera", "viewing distance" });
         const bool anisotropy = changed.contains({ "General", "anisotropy" });
         const bool gamma = changed.contains({ "Video", "gamma" });
         if (!upscale && !indirect && !bounceRays && !directLampRays && !shadowFloor && !lampFalloff && !ambient
             && !reach && !anisotropy && !gamma && !lamps && !antiFirefly && !indirectLimit && !indirectBrightness
-            && !emissiveBounce)
+            && !emissiveBounce && !interiorWindow && !interiorSun && !interiorSkylight && !interiorGodrays)
             return;
 
         // What asks is somebody choosing from a menu, so a value the derivation refuses is reported
@@ -834,6 +846,17 @@ namespace MWRender
             mRenderer->setIndirectBrightness(settings->mIndirectBrightness);
         if (emissiveBounce)
             mRenderer->setEmissiveBounce(settings->mEmissiveBounce);
+        if (interiorWindow)
+        {
+            mMirror.setInteriorWindowSunlight(settings->mInteriorWindowSunlight);
+            mSky.setInteriorWindowSunlight(settings->mInteriorWindowSunlight);
+        }
+        if (interiorSun)
+            mSky.setInteriorSunlightStrength(settings->mInteriorSunlightStrength);
+        if (interiorSkylight)
+            mSky.setInteriorWindowSkylight(settings->mInteriorWindowSkylight);
+        if (interiorGodrays)
+            mSky.setInteriorWindowGodrays(settings->mInteriorWindowGodrays);
     }
 
     MyGUI::ITexture& RtxRenderer::freezeFrame() noexcept
@@ -999,6 +1022,8 @@ namespace MWRender
 
         // After the last walk, because a walk clears the frame's lists.
         mMirror.addRipples(mRipples.getImpulses());
+        mMirror.addWindowPortalLights(mSky.readWindowPortalLighting(
+            frame.mWorld, frame.mSky, mMirror.getScene().placements().getCounts().mWindowPortals > 0));
 
         traceWorld(frame, view, report, since);
 
@@ -1180,7 +1205,7 @@ namespace MWRender
         mSky.follow(
             frame.mSky, mMirror.getScene(), *getResources().getSceneManager(), mMirror.getWalkContext().mContent);
         request.mWorld = mSky.read(frame.mSky, frame.mWorld, frame.mPrecipitation, frame.mWhen.getSimulationTime(),
-            frame.mEye.closesAirAt(mMirror.getReach()));
+            frame.mEye.closesAirAt(mMirror.getReach()), mMirror.getScene().placements().getCounts().mWindowPortals > 0);
         request.mSky = &mSky.getContent();
 
         const double now = getLoopClock().getNow();

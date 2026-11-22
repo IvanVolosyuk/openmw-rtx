@@ -35,6 +35,15 @@ namespace MWRender
     struct SkyState;
     struct WorldState;
 
+    /// Exterior daylight terms projected onto interior window portal lights (`LIGHT_WINDOW`).
+    struct WindowPortalLighting
+    {
+        bool mActive = false;
+        osg::Vec3f mSkyScatter;
+        osg::Vec3f mSunDirection{ 0.0f, 0.0f, 1.0f };
+        osg::Vec3f mSunScatter;
+    };
+
     /// Turns what the game says about a frame's world into what the renderer builds a sky, an air
     /// and a sea out of: the colours decoded, whether the cell has a sky decided, and every reading
     /// handed to the one builder that decides what a sun, a room light, an air and a moon may be —
@@ -90,6 +99,15 @@ namespace MWRender
         /// Scales record ambient fill (`[RTX] ambient brightness`).
         void setAmbientScale(float scale) { mAmbientScale = scale; }
 
+        /// Configures interior window sky portal sunlight, skylight, and volumetric dust shafts.
+        void setInteriorWindowSunlight(bool enabled) { mInteriorWindowSunlight = enabled; }
+        void setInteriorSunlightStrength(float strength) { mInteriorSunlightStrength = strength; }
+        void setInteriorWindowSkylight(float scale) { mInteriorWindowSkylight = scale; }
+        void setInteriorWindowGodrays(float strength) { mInteriorWindowGodrays = strength; }
+
+        WindowPortalLighting readWindowPortalLighting(
+            const WorldState& world, const SkyState& sky, bool hasWindowPortals) const;
+
         /// Where the sky's sheets stand in the world's texture table, which a frame is described
         /// with (`Rtx::FrameRequest::mSky`): from `attach` to `detach`.
         const Rtx::SkyContent& getContent() const { return mSkyContent; }
@@ -105,7 +123,7 @@ namespace MWRender
         /// @param seconds the world's clock, which the sea is animated by.
         /// @param reach how far the world is built, in units, which the open air closes over.
         Rtx::WorldReading read(const SkyState& sky, const WorldState& world, const Precipitation& falling,
-            double seconds, float reach) const;
+            double seconds, float reach, bool hasWindowPortals = false) const;
 
     private:
         /// The sky's own meshes, as the settings name them, and each weather's sheet, as the
@@ -142,5 +160,9 @@ namespace MWRender
         osg::Vec3f mWaterScatter;
 
         float mAmbientScale = 1.0f;
+        bool mInteriorWindowSunlight = true;
+        float mInteriorSunlightStrength = 1.0f;
+        float mInteriorWindowSkylight = 1.0f;
+        float mInteriorWindowGodrays = 1.0f;
     };
 }

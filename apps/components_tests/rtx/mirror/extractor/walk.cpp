@@ -10,6 +10,7 @@
 #include <gtest/gtest.h>
 
 #include <osg/Array>
+#include <osg/BlendFunc>
 #include <osg/FrontFace>
 #include <osg/Group>
 #include <osg/LOD>
@@ -31,6 +32,7 @@
 #include <osg/ref_ptr>
 
 #include <apps/components_tests/rtx/support/graph.hpp>
+#include <components/misc/constants.hpp>
 #include <components/nif/niftypes.hpp>
 #include <components/nifosg/autotransform.hpp>
 #include <components/rtx/common/finite.hpp>
@@ -44,6 +46,7 @@
 #include <components/rtx/scene/refusals.hpp>
 #include <components/rtx/scene/scenedesc.hpp>
 #include <components/sceneutil/extradata.hpp>
+#include <components/sceneutil/material.hpp>
 
 #include "fixture.hpp"
 
@@ -721,6 +724,98 @@ namespace Rtx::Testing
             walk(*root, 0, 2);
             EXPECT_EQ(rowAt(osg::Vec3f(4001.0f, 0.0f, 0.0f)).mPrevious.getTrans(), osg::Vec3f(4000.0f, 0.0f, 0.0f))
                 << "a jump outlived the walk it was told for";
+        }
+
+        TEST_F(RtxSceneExtractorTest, interiorWindowPortalsSuppressNightDayAdditiveRaysAndTagGlass)
+        {
+            const auto makeBlendedQuad = [](osg::BlendFunc::BlendFuncMode dst) {
+                osg::ref_ptr<osg::Geometry> quad = makeQuad();
+                osg::StateSet& state = *quad->getOrCreateStateSet();
+                paint(state, "textures/vfx_alt_glow02.dds");
+                state.setAttributeAndModes(
+                    new osg::BlendFunc(osg::BlendFunc::SRC_ALPHA, dst), osg::StateAttribute::ON);
+                return quad;
+            };
+            const auto makeLitOpaqueQuad = [](bool emissive) {
+                osg::ref_ptr<osg::Geometry> quad = makeQuad();
+                osg::StateSet& state = *quad->getOrCreateStateSet();
+                paint(state, "textures/tx_window_diamond_01.dds");
+                osg::ref_ptr<SceneUtil::Material> mat = new SceneUtil::Material;
+                mat->setDiffuse(osg::Vec4f(1.0f, 1.0f, 1.0f, 1.0f));
+                mat->setEmission(emissive ? osg::Vec4f(1.0f, 1.0f, 1.0f, 1.0f) : osg::Vec4f(0.0f, 0.0f, 0.0f, 1.0f));
+                state.setAttribute(mat);
+                return quad;
+            };
+
+            osg::ref_ptr<osg::Group> intDay = new osg::Group;
+            intDay->addChild(makeLitOpaqueQuad(true)); // glowing window pane -> mWindowPortal
+            intDay->addChild(makeLitOpaqueQuad(false)); // non-glowing shutter under INT-DAY -> kept, not portal
+            intDay->addChild(makeBlendedQuad(osg::BlendFunc::ONE_MINUS_SRC_ALPHA)); // GitD 0x10ED Tri Rays cone
+            intDay->addChild(makeBlendedQuad(osg::BlendFunc::ONE)); // additive ray cone
+
+            osg::ref_ptr<osg::Switch> nightDay = new osg::Switch;
+            nightDay->setName(Constants::NightDayLabel);
+            nightDay->addChild(makeQuad());
+            nightDay->addChild(new osg::Group);
+            nightDay->addChild(intDay);
+            nightDay->setSingleChildOn(2);
+
+            osg::ref_ptr<osg::Group> root = new osg::Group;
+            root->addChild(nightDay);
+            // Blended and additive meshes outside NightDaySwitch must never be suppressed.
+            root->addChild(makeBlendedQuad(osg::BlendFunc::ONE_MINUS_SRC_ALPHA));
+            root->addChild(makeBlendedQuad(osg::BlendFunc::ONE));
+
+            // 1. With interior window portals disabled (exterior behavior), all six meshes place
+            //    and none are marked mWindowPortal.
+            mExtractor.setInteriorWindowPortals(false);
+            walk(*root, 0, 0);
+            mExtractor.retire();
+            EXPECT_EQ(mScene.placements().getCounts().mPlaced, 6u);
+            EXPECT_EQ(mScene.placements().getCounts().mWindowPortals, 0u);
+            EXPECT_EQ(mScene.placements().getCounts().mAdditive, 2u);
+
+            // 2. Enabling interior window portals suppresses both alpha-blended and additive
+            //    NightDaySwitch ray cones and tags only the glowing pane as mWindowPortal, while
+            //    preserving the non-glowing shutter and standalone meshes outside NightDaySwitch.
+            mExtractor.setInteriorWindowPortals(true);
+            mScene.clearPlacement();
+            walk(*root, 0, 1);
+            mExtractor.retire();
+            EXPECT_EQ(mScene.placements().getCounts().mPlaced, 4u);
+            EXPECT_EQ(mScene.placements().getCounts().mWindowPortals, 1u);
+            EXPECT_EQ(mScene.placements().getCounts().mAdditive, 1u);
+            EXPECT_TRUE(mScene.isConsistent());
+
+            // 3. Even when NightDaySwitch selects child 0 (dusk/night/overcast Default mode), enabling
+            //    interior window portals still follows child 2 (INT-DAY) so portals remain continuous.
+            nightDay->setSingleChildOn(0);
+            mScene.clearPlacement();
+            walk(*root, 0, 2);
+            mExtractor.retire();
+            EXPECT_EQ(mScene.placements().getCounts().mPlaced, 4u);
+            EXPECT_EQ(mScene.placements().getCounts().mWindowPortals, 1u);
+            EXPECT_EQ(mScene.placements().getCounts().mAdditive, 1u);
+            EXPECT_TRUE(mScene.isConsistent());
+
+            // 4. Disabling returns cleanly to the active switch child.
+            nightDay->setSingleChildOn(2);
+            mExtractor.setInteriorWindowPortals(false);
+            mScene.clearPlacement();
+            walk(*root, 0, 3);
+            mExtractor.retire();
+            EXPECT_EQ(mScene.placements().getCounts().mPlaced, 6u);
+            EXPECT_EQ(mScene.placements().getCounts().mWindowPortals, 0u);
+            EXPECT_EQ(mScene.placements().getCounts().mAdditive, 2u);
+            EXPECT_TRUE(mScene.isConsistent());
+
+            nightDay->setSingleChildOn(0);
+            mScene.clearPlacement();
+            walk(*root, 0, 4);
+            mExtractor.retire();
+            EXPECT_EQ(mScene.placements().getCounts().mPlaced, 3u);
+            EXPECT_EQ(mScene.placements().getCounts().mWindowPortals, 0u);
+            EXPECT_TRUE(mScene.isConsistent());
         }
     }
 }

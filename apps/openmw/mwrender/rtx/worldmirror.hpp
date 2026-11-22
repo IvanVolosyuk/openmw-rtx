@@ -53,6 +53,7 @@ namespace SceneUtil
 namespace MWRender
 {
     struct SceneFrame;
+    struct WindowPortalLighting;
     class TracedGroundcover;
 
     /// The engine's scene graph mirrored into what a ray can meet.
@@ -70,6 +71,7 @@ namespace MWRender
     public:
         explicit WorldMirror(const MirrorKnobs& knobs);
         void setLampSettings(const Rtx::LampSettings& settings) { mLamps = settings; }
+        void setInteriorWindowSunlight(bool enabled) { mInteriorWindowSunlight = enabled; }
 
         /// Asserts the scene empty: a world detached has given every row back, and the one that
         /// did not is named here rather than found at the next frame's horizon. Not while an
@@ -115,6 +117,9 @@ namespace MWRender
         /// What disturbed the water this frame, into the scene the walk just cleared, so the
         /// trace presses it and the digest sees it. After `mirror`, which clears the frame's lists.
         void addRipples(std::span<const Rtx::RippleImpulse> impulses);
+
+        /// Emits area portal lights (`LIGHT_WINDOW`) inward from clustered `mWindowPortal` panes.
+        void addWindowPortalLights(const WindowPortalLighting& lighting);
 
         /// A cell the scene added, which is what the sea is centred on, as `Water::changeCell`
         /// centres it (`seaCentre`): the middle of the cell outdoors, the origin indoors, the last
@@ -200,6 +205,7 @@ namespace MWRender
 
         /// `MirrorKnobs::mDistantStatics`, which every frame's world says (`Rtx::CellWorld::mStatics`).
         bool mDistantStatics = true;
+        bool mInteriorWindowSunlight = true;
         Rtx::LampSettings mLamps;
 
         Rtx::SceneExtractor mExtractor;

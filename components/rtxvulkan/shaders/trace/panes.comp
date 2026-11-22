@@ -177,9 +177,7 @@ void main()
             [[dont_unroll]] while ((ask.mTraced || column.mStep != RUN_IDLE) && turns < WALK_TURNS)
             {
                 ++turns;
-                RayAnswer answered = RayAnswer(false, unansweredScene());
-                if (ask.mTraced)
-                    answered = RayAnswer(true, queryScene(ask.mQuery));
+                const RayAnswer answered = answerAsked(ask);
                 ask = noRay();
 
                 if (skyPassage.mStep != RUN_IDLE)

@@ -58,6 +58,56 @@ namespace MWWorld
             float magnitude = numerator != 0.0f ? std::numeric_limits<float>::max() : 0.0f;
             return std::signbit(numerator) != std::signbit(divisor) ? -magnitude : magnitude;
         }
+
+        struct SunOrbitState
+        {
+            osg::Vec3f mDirection;
+            bool mNight = false;
+            float mGlareFade = 1.f;
+        };
+
+        /// Computes the exterior sun direction, night flag, and glare fade from the game hour.
+        SunOrbitState calculateSunOrbit(
+            const float hour, const float sunriseTime, const Sky::TimeOfDaySettings& times)
+        {
+            float adjustedHour = hour;
+            float adjustedNightStart = times.mNightStart;
+            if (hour < sunriseTime)
+                adjustedHour += 24.f;
+            if (times.mNightStart < sunriseTime)
+                adjustedNightStart += 24.f;
+
+            const bool isNight = adjustedHour >= adjustedNightStart;
+            const float dayDuration = adjustedNightStart - sunriseTime;
+            const float nightDuration = 24.f - dayDuration;
+
+            float orbit;
+            if (!isNight)
+            {
+                const float t = (adjustedHour - sunriseTime) / dayDuration;
+                orbit = 1.f - 2.f * t;
+            }
+            else
+            {
+                const float t = (adjustedHour - adjustedNightStart) / nightDuration;
+                orbit = 2.f * t - 1.f;
+            }
+
+            const float peakHour = sunriseTime + (times.mNightStart - sunriseTime) / 2.f;
+            float glareFade = 1.f;
+            if (hour < sunriseTime || hour > times.mNightStart)
+                glareFade = 0.f;
+            else if (hour < peakHour)
+                glareFade = 1.f - (peakHour - hour) / (peakHour - sunriseTime);
+            else
+                glareFade = 1.f - (hour - peakHour) / (times.mNightStart - peakHour);
+
+            return SunOrbitState{
+                .mDirection = Sky::sunDirection(orbit),
+                .mNight = isNight,
+                .mGlareFade = glareFade,
+            };
+        }
     }
 
     osg::Vec3f Weather::defaultDirection()
@@ -823,6 +873,24 @@ namespace MWWorld
             mNightDayMode = Default;
 
         mSky.mWeatherRan = isExterior;
+        mSky.mWeather = calculateWeatherResult(time.getHour(), duration, paused, isExterior);
+        mSky.keepNames();
+        if (mSky.mWeather.mWeather != nullptr)
+        {
+            mShownWeather = *mSky.mWeather.mWeather;
+            mSky.mWeather.mWeather = &mShownWeather;
+        }
+        const MWRender::WeatherResult& result = mSky.mWeather;
+
+        // Compute sun orbit and glare fade for both exteriors and interiors (without driving
+        // exterior rasterizer lighting or sounds when indoors).
+        mSky.mSunUp = Sky::sunUp(time.getHour(), mTimeSettings);
+        const SunOrbitState sunOrbit = calculateSunOrbit(time.getHour(), mSunriseTime, mTimeSettings);
+        mSky.mSunDirection = sunOrbit.mDirection;
+        mSky.mNight = sunOrbit.mNight;
+        mSky.mGlareFade = sunOrbit.mGlareFade;
+        mSky.mExteriorValid = true;
+
         if (!isExterior)
         {
             mRendering.setSkyEnabled(false);
@@ -832,15 +900,6 @@ namespace MWWorld
             mNextWindSpeed = 0.f;
             return;
         }
-
-        mSky.mWeather = calculateWeatherResult(time.getHour(), duration, paused);
-        mSky.keepNames();
-        if (mSky.mWeather.mWeather != nullptr)
-        {
-            mShownWeather = *mSky.mWeather.mWeather;
-            mSky.mWeather.mWeather = &mShownWeather;
-        }
-        const MWRender::WeatherResult& result = mSky.mWeather;
 
         if (!paused)
         {
@@ -852,55 +911,9 @@ namespace MWWorld
         mIsStorm = result.getIsStorm();
         mUseTorches = result.getUseTorches();
 
-        // disable sun during night
-        mSky.mSunUp = Sky::sunUp(time.getHour(), mTimeSettings);
-
-        // Update the sun direction.  Run it east to west at a fixed angle from overhead.
-        // The sun's speed at day and night may differ, since mSunriseTime and mNightStart
-        // mark when the sun is level with the horizon.
-        {
-            // Shift times into a 24-hour window beginning at mSunriseTime...
-            float adjustedHour = time.getHour();
-            float adjustedNightStart = mTimeSettings.mNightStart;
-            if (time.getHour() < mSunriseTime)
-                adjustedHour += 24.f;
-            if (mTimeSettings.mNightStart < mSunriseTime)
-                adjustedNightStart += 24.f;
-
-            const bool isNight = adjustedHour >= adjustedNightStart;
-            const float dayDuration = adjustedNightStart - mSunriseTime;
-            const float nightDuration = 24.f - dayDuration;
-
-            float orbit;
-            if (!isNight)
-            {
-                float t = (adjustedHour - mSunriseTime) / dayDuration;
-                orbit = 1.f - 2.f * t;
-            }
-            else
-            {
-                float t = (adjustedHour - adjustedNightStart) / nightDuration;
-                orbit = 2.f * t - 1.f;
-            }
-
-            const osg::Vec3f sunDir = Sky::sunDirection(orbit);
-            mRendering.setSunDirection(sunDir);
-            mSky.mSunDirection = sunDir;
-            mSky.mNight = isNight;
-        }
+        mRendering.setSunDirection(sunOrbit.mDirection);
 
         float underwaterFog = mUnderwaterFog.getValue(time.getHour(), mTimeSettings, "Fog");
-
-        float peakHour = mSunriseTime + (mTimeSettings.mNightStart - mSunriseTime) / 2;
-        float glareFade = 1.f;
-        if (time.getHour() < mSunriseTime || time.getHour() > mTimeSettings.mNightStart)
-            glareFade = 0.f;
-        else if (time.getHour() < peakHour)
-            glareFade = 1.f - (peakHour - time.getHour()) / (peakHour - mSunriseTime);
-        else
-            glareFade = 1.f - (time.getHour() - peakHour) / (mTimeSettings.mNightStart - peakHour);
-
-        mSky.mGlareFade = glareFade;
 
         mSky.mMoons[0] = mMasser.calculateState(time);
         mSky.mMoons[1] = mSecunda.calculateState(time);
@@ -909,7 +922,7 @@ namespace MWWorld
         mRendering.configureFog(
             result.mFogDepth, underwaterFog, result.mDLFogFactor, result.mDLFogOffset / 100.0f, result.mFogColor);
         mRendering.setAmbientColour(result.mAmbientColor);
-        mRendering.setSunColour(result.mSunColor, result.mSunColor, result.mGlareView * glareFade);
+        mRendering.setSunColour(result.mSunColor, result.mSunColor, result.mGlareView * sunOrbit.mGlareFade);
 
         // Play sounds
         if (mPlayingAmbientSoundID != result.getAmbientLoopSoundID())
@@ -1105,6 +1118,8 @@ namespace MWWorld
         mFastForward = false;
         mNightDayMode = Default;
         mMoonsSeen = false;
+        mSky.mWeatherRan = false;
+        mSky.mExteriorValid = false;
         forceWeather(ESM::Weather::indexToRefId(0));
         mRegions.clear();
         importRegions();
@@ -1244,7 +1259,7 @@ namespace MWWorld
     }
 
     MWRender::WeatherResult WeatherManager::calculateWeatherResult(
-        const float gameHour, const float elapsedSeconds, const bool isPaused) const
+        const float gameHour, const float elapsedSeconds, const bool isPaused, const bool effectsEnabled) const
     {
         MWRender::WeatherResult result;
         float flash = 0.0f;
@@ -1253,15 +1268,19 @@ namespace MWWorld
             return result;
         if (Weather* next = mWeatherStore->search(mNextWeather))
         {
-            result = calculateTransitionResult(*current, *next, 1 - mTransitionFactor, gameHour);
-            float currentFlash = current->calculateThunder(mTransitionFactor, elapsedSeconds, isPaused);
-            float nextFlash = next->calculateThunder(1 - mTransitionFactor, elapsedSeconds, isPaused);
-            flash = currentFlash + nextFlash;
+            result = calculateTransitionResult(*current, *next, 1 - mTransitionFactor, gameHour, effectsEnabled);
+            if (effectsEnabled)
+            {
+                float currentFlash = current->calculateThunder(mTransitionFactor, elapsedSeconds, isPaused);
+                float nextFlash = next->calculateThunder(1 - mTransitionFactor, elapsedSeconds, isPaused);
+                flash = currentFlash + nextFlash;
+            }
         }
         else
         {
-            result = calculateResult(*current, gameHour);
-            flash = current->calculateThunder(1.0f, elapsedSeconds, isPaused);
+            result = calculateResult(*current, gameHour, effectsEnabled);
+            if (effectsEnabled)
+                flash = current->calculateThunder(1.0f, elapsedSeconds, isPaused);
         }
         osg::Vec4f flashColor(flash, flash, flash, 0.0f);
 
@@ -1271,14 +1290,16 @@ namespace MWWorld
         return result;
     }
 
-    MWRender::WeatherResult WeatherManager::calculateResult(const Weather& current, const float gameHour) const
+    MWRender::WeatherResult WeatherManager::calculateResult(
+        const Weather& current, const float gameHour, const bool effectsEnabled) const
     {
         MWRender::WeatherResult result;
 
         result.mCloudTexture = current.mCloudTexture;
         result.mCloudBlendFactor = 0;
         result.mNextWindSpeed = 0;
-        result.mWindSpeed = result.mCurrentWindSpeed = calculateWindSpeed(current, mWindSpeed);
+        result.mWindSpeed = result.mCurrentWindSpeed
+            = effectsEnabled ? calculateWindSpeed(current, mWindSpeed) : 0.f;
         result.mBaseWindSpeed = current.mWindSpeed;
 
         result.mCloudSpeed = current.mCloudSpeed;
@@ -1331,11 +1352,11 @@ namespace MWWorld
         return result;
     }
 
-    MWRender::WeatherResult WeatherManager::calculateTransitionResult(
-        const Weather& currentWeather, const Weather& nextWeather, const float factor, const float gameHour) const
+    MWRender::WeatherResult WeatherManager::calculateTransitionResult(const Weather& currentWeather,
+        const Weather& nextWeather, const float factor, const float gameHour, const bool effectsEnabled) const
     {
-        const MWRender::WeatherResult current = calculateResult(currentWeather, gameHour);
-        const MWRender::WeatherResult other = calculateResult(nextWeather, gameHour);
+        const MWRender::WeatherResult current = calculateResult(currentWeather, gameHour, effectsEnabled);
+        const MWRender::WeatherResult other = calculateResult(nextWeather, gameHour, effectsEnabled);
         MWRender::WeatherResult result;
 
         result.mStormDirection = current.mStormDirection;
@@ -1355,8 +1376,8 @@ namespace MWWorld
         result.mDLFogFactor = lerp(current.mDLFogFactor, other.mDLFogFactor, factor);
         result.mDLFogOffset = lerp(current.mDLFogOffset, other.mDLFogOffset, factor);
 
-        result.mCurrentWindSpeed = calculateWindSpeed(currentWeather, mCurrentWindSpeed);
-        result.mNextWindSpeed = calculateWindSpeed(nextWeather, mNextWindSpeed);
+        result.mCurrentWindSpeed = effectsEnabled ? calculateWindSpeed(currentWeather, mCurrentWindSpeed) : 0.f;
+        result.mNextWindSpeed = effectsEnabled ? calculateWindSpeed(nextWeather, mNextWindSpeed) : 0.f;
         result.mBaseWindSpeed = lerp(current.mBaseWindSpeed, other.mBaseWindSpeed, factor);
 
         result.mWindSpeed = lerp(result.mCurrentWindSpeed, result.mNextWindSpeed, factor);

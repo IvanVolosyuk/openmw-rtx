@@ -10,6 +10,7 @@
 #include <apps/openmw/mwworld/datetimemanager.hpp>
 #include <apps/openmw/mwworld/ptr.hpp>
 #include <apps/openmw/mwworld/timestamp.hpp>
+#include <components/esm/stringrefid.hpp>
 #include <components/sceneutil/lightmanager.hpp>
 #include <components/sceneutil/positionattitudetransform.hpp>
 #include <components/settings/values.hpp>
@@ -52,13 +53,17 @@ namespace MWRender
         const MWWorld::Ptr& player = MWMechanics::getPlayer();
         if (described.mLocation == Location::Interior && player.isInCell())
         {
-            const auto& mood = player.getCell()->getCell()->getMood();
+            const MWWorld::CellStore* cell = player.getCell();
+            const auto& mood = cell->getCell()->getMood();
             described.mRoom = ESM::Cell::AMBIstruct{
                 .mAmbient = mood.mAmbiantColor,
                 .mSunlight = mood.mDirectionalColor,
                 .mFog = mood.mFogColor,
                 .mFogDensity = mood.mFogDensity,
             };
+            const MWWorld::ConstPtr northMarker = cell->searchConst(ESM::RefId::stringRefId("northmarker"));
+            if (!northMarker.isEmpty())
+                described.mNorthMarkerYaw = northMarker.getRefData().getPosition().rot[2];
         }
 
         described.mWater = mWater;

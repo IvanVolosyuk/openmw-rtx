@@ -1399,7 +1399,9 @@ struct LandingLight
 /// @param seeds the sequences the landing draws from, its ray's (`bounceSeedsAt`).
 LandingLight landingLightOf(Surface landing, bool lobe, uvec2 pixel, vec3 weight, BounceSeeds seeds)
 {
-    const bool lampBody = (instanceAt(landing.mInstance).mClass & INSTANCE_LAMP_BODY) != 0u;
+    const uint instClass = instanceAt(landing.mInstance).mClass;
+    const bool lampBody = (instClass & INSTANCE_LAMP_BODY) != 0u;
+    const bool windowPortal = frame.mInteriorWindow != 0u && (instClass & INSTANCE_WINDOW_PORTAL) != 0u;
     const float keep = lampBody ? 0.0 : 1.0;
     landing.mEmissiveColour *= keep;
     landing.mEmitted *= keep;
@@ -1413,7 +1415,9 @@ LandingLight landingLightOf(Surface landing, bool lobe, uvec2 pixel, vec3 weight
 
     LandingLight light;
     light.mGlow = weight * litSurface(landing, vec3(0.0), vec3(0.0));
-    if (frame.mEmissiveBounceOffset != 0.0)
+    if (windowPortal)
+        light.mGlow *= WINDOW_SKY_BOUNCE_GAIN;
+    else if (frame.mEmissiveBounceOffset != 0.0)
         light.mGlow *= max(1.0 + frame.mEmissiveBounceOffset, 0.0);
     light.mFill = weight * end.mFill;
     light.mSky = weight * (landing.mAlbedo * end.mSkyDiffuse + end.mSkySpecular);

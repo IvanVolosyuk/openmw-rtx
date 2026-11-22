@@ -56,6 +56,9 @@ namespace MWGui
         MyGUI::ScrollBar* mRayTracingIndirectLimit;
         MyGUI::ScrollBar* mRayTracingIndirectBrightness;
         MyGUI::ScrollBar* mRayTracingEmissiveBounce;
+        MyGUI::ScrollBar* mRayTracingInteriorSunlightStrength;
+        MyGUI::ScrollBar* mRayTracingInteriorWindowSkylight;
+        MyGUI::ScrollBar* mRayTracingInteriorWindowGodrays;
 
         // controls
         MyGUI::ScrollView* mControlsBox;

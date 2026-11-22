@@ -129,6 +129,18 @@ namespace Rtx
         SceneExtractor(SceneExtractor&&) = delete;
         SceneExtractor& operator=(SceneExtractor&&) = delete;
 
+        /// Whether interior `NightDaySwitch` subtrees suppress hardcoded additive sunray meshes and tag
+        /// window panes as sky/sun portals (`MeshInstance::mWindowPortal`).
+        void setInteriorWindowPortals(bool enabled)
+        {
+            if (mInteriorWindowPortals != enabled)
+            {
+                mPhase.expect(Phase::Between);
+                mInteriorWindowPortals = enabled;
+                mFrozen.thawAll(frozenHolders());
+            }
+        }
+
         /// Which nodes the walks may descend into, as an `osg` traversal mask: what keeps the
         /// mirror out of subtrees the ray tracer answers for itself, such as the sky's mask,
         /// without knowing what a sky is, and out of what the content hides.
@@ -381,7 +393,7 @@ namespace Rtx
         /// the sea, a mesh that deforms — which keeps a reference root above it walked.
         bool addDrawable(const osg::Drawable& drawable, std::size_t who, std::span<const Shading> shading,
             const osg::Matrixf& place, InstanceClass what, WalkGlows& glows, bool jumped, bool lampBody,
-            std::span<osg::Node* const> path);
+            bool nightDaySwitch, std::span<osg::Node* const> path);
 
         /// The state set a controller wrote over a node this frame, or null where none writes one —
         /// `MaterialResolver::animate`, which says why a node under one needs none. Applied here rather
@@ -451,6 +463,7 @@ namespace Rtx
 
         /// See `setJumped`.
         LampSettings mLampSettings;
+        bool mInteriorWindowPortals = false;
         std::span<const osg::Node* const> mJumped;
 
         /// Every effect this walk entered, in the order it entered them. Which of them the walk

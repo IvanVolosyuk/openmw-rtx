@@ -29,6 +29,10 @@ namespace MWRender
         int mDirectLampRays = 1;
         float mShadowFloor = 0.0f;
         float mAmbientScale = 1.0f;
+        bool mInteriorWindowSunlight = true;
+        float mInteriorSunlightStrength = 1.0f;
+        float mInteriorWindowSkylight = 1.0f;
+        float mInteriorWindowGodrays = 1.0f;
         float mLampFalloff = 1.0f;
         Rtx::LampSettings mLamps;
         float mDistantLandCells = 0.0f;
@@ -76,6 +80,12 @@ namespace MWRender
 
         /// Scale applied to cell and weather record ambient fill (`[RTX] ambient brightness`).
         float mAmbientScale = 1.0f;
+
+        /// Interior window sky/sun portals and volumetric dust shafts (`[RTX] interior *`).
+        bool mInteriorWindowSunlight = true;
+        float mInteriorSunlightStrength = 1.0f;
+        float mInteriorWindowSkylight = 1.0f;
+        float mInteriorWindowGodrays = 1.0f;
 
         /// `SamplingSwitches::mLampFalloff`: lamp distance-attenuation steepness (`[RTX] lamp falloff`).
         float mLampFalloff = 1.0f;

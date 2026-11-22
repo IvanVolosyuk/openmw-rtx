@@ -689,5 +689,46 @@ namespace Rtx
             EXPECT_GT(stars.mClouds.mShadowed.x(), night.mClouds.mShadowed.x())
                 << "the deck was lit out of a sky the stars had not been counted into";
         }
+
+        TEST(RtxFrameWorldTest, interiorWindowSkyDrivesPortalsWithoutBreakingRoomScale)
+        {
+            WorldReading room = reading();
+            room.mOutdoors = false;
+            room.mDaylight.mLight.mDaylightGain = 1.0f;
+            room.mDaylight.mLight.mSun = Sun{};
+            room.mDaylight.mFog.mExtinction = 0.0f;
+            room.mInteriorWindowSky = InteriorWindowSky{
+                .mSun = { .mPosition = osg::Vec3f(0.0f, 0.6f, 0.8f),
+                    .mIrradiance = osg::Vec3f(1.5f, 1.3f, 1.1f),
+                    .mDiscColour = osg::Vec3f(1.0f, 0.9f, 0.8f) },
+                .mSkyHorizon = osg::Vec3f(0.25f, 0.35f, 0.45f),
+                .mSkyZenith = osg::Vec3f(0.10f, 0.30f, 0.60f),
+                .mDust = Shaders::INTERIOR_DUST_EXTINCTION,
+            };
+
+            Shaders::VisibilityConstants lit{};
+            FogDrift drift;
+            describe(room, drift, lit);
+
+            EXPECT_EQ(lit.mInteriorWindow, 1u);
+            EXPECT_EQ(lit.mInteriorSun, 1u);
+            EXPECT_FLOAT_EQ(lit.mInteriorDust, Shaders::INTERIOR_DUST_EXTINCTION);
+            EXPECT_FLOAT_EQ(lit.mAmbientFromSky, 0.0f);
+            EXPECT_FLOAT_EQ(lit.mDaylightGain, 1.0f);
+            EXPECT_FLOAT_EQ(lit.mFogExtinction, 0.0f);
+            EXPECT_EQ(lit.mWindowSkyHorizon, Shaders::vec3(0.25f, 0.35f, 0.45f));
+            EXPECT_EQ(lit.mWindowSkyZenith, Shaders::vec3(0.10f, 0.30f, 0.60f));
+            EXPECT_EQ(lit.mSun.mDirection, Shaders::vec3(0.0f, 0.6f, 0.8f));
+            EXPECT_EQ(lit.mSun.mIrradiance, Shaders::vec3(1.5f, 1.3f, 1.1f));
+
+            // Nighttime or overcast window with zero direct sun keeps window portal sky active for
+            // glass appearance and skylight bounce while disabling direct sun shafts and dust.
+            room.mInteriorWindowSky->mSun.mIrradiance = osg::Vec3f(0.0f, 0.0f, 0.0f);
+            Shaders::VisibilityConstants night{};
+            describe(room, drift, night);
+            EXPECT_EQ(night.mInteriorWindow, 1u);
+            EXPECT_EQ(night.mInteriorSun, 0u);
+            EXPECT_FLOAT_EQ(night.mInteriorDust, 0.0f);
+        }
     }
 }

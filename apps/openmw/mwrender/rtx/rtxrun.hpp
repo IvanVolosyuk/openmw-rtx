@@ -39,6 +39,12 @@ namespace MWRender
         /// Scale applied to cell/weather record ambient fill (`[RTX] ambient brightness`).
         float mAmbientScale = 1.0f;
 
+        /// Interior window sky/sun portals and volumetric dust shafts (`[RTX] interior *`).
+        bool mInteriorWindowSunlight = true;
+        float mInteriorSunlightStrength = 1.0f;
+        float mInteriorWindowSkylight = 1.0f;
+        float mInteriorWindowGodrays = 1.0f;
+
         /// What draws the frames.
         RtxBackend mBackend = RtxBackend::Vulkan;
 

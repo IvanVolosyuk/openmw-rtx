@@ -450,11 +450,12 @@ namespace MWWorld
         bool inTransition() const;
         void addWeatherTransition(ESM::RefId weatherID);
 
-        MWRender::WeatherResult calculateWeatherResult(
-            const float gameHour, const float elapsedSeconds, const bool isPaused) const;
-        MWRender::WeatherResult calculateResult(const Weather& weather, const float gameHour) const;
-        MWRender::WeatherResult calculateTransitionResult(
-            const Weather& currentWeather, const Weather& nextWeather, const float factor, const float gameHour) const;
+        MWRender::WeatherResult calculateWeatherResult(const float gameHour, const float elapsedSeconds,
+            const bool isPaused, const bool effectsEnabled = true) const;
+        MWRender::WeatherResult calculateResult(
+            const Weather& weather, const float gameHour, const bool effectsEnabled = true) const;
+        MWRender::WeatherResult calculateTransitionResult(const Weather& currentWeather, const Weather& nextWeather,
+            const float factor, const float gameHour, const bool effectsEnabled = true) const;
         float calculateWindSpeed(const Weather& weather, float currentSpeed) const;
     };
 }

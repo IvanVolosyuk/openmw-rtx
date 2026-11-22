@@ -127,6 +127,10 @@ namespace Rtx
         /// (`SceneUtil::LampBody`, `givesLight`).
         bool mLampBody = false;
 
+        /// Whether this is an interior window glass pane under `NightDaySwitch` acting as a sky/sun
+        /// portal (`INSTANCE_WINDOW_PORTAL`).
+        bool mWindowPortal = false;
+
         /// Who stood it, which is who may move it or drop it. The walk's unless the ring says so.
         Stander mStander = Stander::Walk;
 
@@ -258,5 +262,8 @@ namespace Rtx
         /// — and so whether the trace reads a dark map's alpha at a see-through candidate at all
         /// (`HAS_DARK_ALPHA`). None in nearly every scene.
         std::uint32_t mDarkAlpha = 0;
+
+        /// How many placements are marked as interior window portals (`MeshInstance::mWindowPortal`).
+        std::uint32_t mWindowPortals = 0;
     };
 }
