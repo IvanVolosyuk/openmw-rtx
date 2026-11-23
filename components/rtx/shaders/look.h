@@ -1466,9 +1466,10 @@ namespace Rtx::Shaders
     /// Skylight gain applied to indirect diffuse bounces landing on interior window portals.
     const float WINDOW_SKY_BOUNCE_GAIN = 1.0f;
 
-    /// Diffuse texel luminance thresholds separating opaque window mullions from transmissive glass.
-    const float WINDOW_MULLION_LOW = 0.05f;
-    const float WINDOW_MULLION_HIGH = 0.30f;
+    /// Relative window texel brightness thresholds (as fractions of the window texture's mean
+    /// brightness) separating opaque lead/wood mullions from transmissive clear or stained glass.
+    const float WINDOW_MULLION_LOW = 0.08f;
+    const float WINDOW_MULLION_HIGH = 0.45f;
 
 #ifdef RTX_HOST
 }

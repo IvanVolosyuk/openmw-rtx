@@ -18,6 +18,8 @@
 #include <apps/components_tests/rtx/support/testtexture.hpp>
 #include <components/rtx/environment/wavespectrum.hpp>
 #include <components/rtx/frame/reconstruction.hpp>
+#include <components/rtx/image/textureencoding.hpp>
+#include <components/rtx/image/texturewrap.hpp>
 #include <components/rtx/renderer/channel.hpp>
 #include <components/rtx/scene/light.hpp>
 #include <components/rtx/scene/material.hpp>
@@ -25,6 +27,7 @@
 #include <components/rtx/shaders/colour.h>
 #include <components/rtx/shaders/gbuffer.h>
 #include <components/rtx/shaders/look.h>
+#include <components/rtx/shaders/scene.h>
 #include <components/rtx/shaders/sky.h>
 #include <components/rtx/shaders/visibility.h>
 #include <components/rtx/world/moon.hpp>
@@ -1217,6 +1220,180 @@ namespace Rtx::Testing
             EXPECT_GT(litPixels, 20u) << "sunlight must enter through the interior window portal";
             EXPECT_GT(seamBlockedPixels, 200u) << "rays escaping past the window must stay blocked";
             EXPECT_GT(frame.mHits, 0u);
+        }
+
+        /// Dark stained-glass textures (such as Hlaalu/Velothi amber glass whose linear luminance
+        /// sits well below 0.05) still glow and transmit sunlight relative to black mullions, and
+        /// glossy window portals never reflect their own inward `LIGHT_WINDOW` sphere emitter.
+        TEST_F(RtxVisibilityTest, interiorWindowPortalTransmitsDarkStainedGlassAndIgnoresOwnWindowLight)
+        {
+            constexpr std::uint32_t size = 64;
+
+            TestTexture stained;
+            for (const std::uint32_t side : { 64u, 32u, 16u, 8u, 4u, 2u, 1u })
+            {
+                stained.mLevels.push_back(
+                    MipLevel{ static_cast<std::uint32_t>(stained.mBytes.size()), side, side });
+                for (std::uint32_t y = 0; y < side; ++y)
+                {
+                    for (std::uint32_t x = 0; x < side; ++x)
+                    {
+                        if (side == 1u)
+                        {
+                            stained.mBytes.insert(stained.mBytes.end(), { 10, 19, 10, 255 });
+                        }
+                        else if (x < side / 2)
+                        {
+                            stained.mBytes.insert(stained.mBytes.end(), { 0, 0, 0, 255 });
+                        }
+                        else
+                        {
+                            stained.mBytes.insert(stained.mBytes.end(), { 20, 32, 20, 255 });
+                        }
+                    }
+                }
+            }
+            stained.describe(64u, 64u, "dark_stained.dds", TextureFormat::Rgba8Srgb);
+            stained.mData.mWrap = TextureWrap::Clamp;
+
+            constexpr std::array<std::uint8_t, 4> glossyTexel{ 255, 255, 255, 255 };
+            TestTexture glossySpec;
+            paintFlat(glossySpec, 1u, glossyTexel, "dark_stained_spec.dds");
+
+            const std::array<TextureData, 2> textures{ stained.mData, glossySpec.mData };
+
+            // Part A: Glossy dark stained-glass window viewed straight on — stained glass glows
+            // brightly while black mullions stay dark, and adding a bright inward `LIGHT_WINDOW`
+            // sphere light produces zero self-reflection circle on the window.
+            {
+                SceneDesc windowScene;
+                const Index diffuseTex
+                    = windowScene.textures().add(VFS::Path::NormalizedView("dark_stained.dds"), TextureWrap::Clamp);
+                const Index specTex = windowScene.textures().add(
+                    VFS::Path::NormalizedView("dark_stained_spec.dds"), TextureWrap::Repeat, TextureEncoding::Data);
+                const Index windowMat = windowScene.addMaterial(Material{
+                    .mDiffuse = diffuseTex,
+                    .mSpecular = specTex,
+                    .mSpecularClassic = true,
+                });
+                const std::array<osg::Vec3f, 4> windowQuad = uprightQuadAt(120.0f, 150.0f, osg::Vec2f(0.0f, 120.0f));
+                const Index windowMesh = windowScene.addMesh(
+                    MeshArrays{ .mPositions = windowQuad, .mTexCoords = sQuadUv, .mIndices = sQuadIndices });
+                windowScene.addInstance(
+                    MeshInstance{ .mMesh = windowMesh, .mMaterial = windowMat, .mWindowPortal = true });
+
+                Shaders::VisibilityConstants camera = Testing::makeCamera(
+                    osg::Vec3f(0.0f, -200.0f, 120.0f), osg::Vec3f(0.0f, 150.0f, 120.0f), 60.0f, size, size, 100000.0f);
+                camera.mSun = Shaders::sunSource(osg::Vec3f(0.0f, 0.0f, 1.0f), osg::Vec3f(0.0f, 0.0f, 0.0f));
+                camera.mSkyHorizon = osg::Vec3f();
+                camera.mSkyZenith = osg::Vec3f();
+                camera.mAmbient = osg::Vec3f();
+                camera.mSurfaceAmbient = osg::Vec3f();
+                camera.mInteriorWindow = 1u;
+                camera.mInteriorSun = 0u;
+                camera.mWindowSkyHorizon = osg::Vec3f(0.5f, 0.6f, 0.8f);
+                camera.mWindowSkyZenith = osg::Vec3f(0.3f, 0.5f, 0.9f);
+
+                const Frame baseline
+                    = shoot(windowScene, textures, camera, size, { .mIndirect = false, .mDirectLampRays = 1u });
+
+                const std::size_t mullionPixel = (std::size_t{ size / 2 } * size + (size / 4)) * 4;
+                const std::size_t glassPixel = (std::size_t{ size / 2 } * size + (3 * size / 4)) * 4;
+                EXPECT_LT(baseline.mRadiance[mullionPixel + 1], 1e-4f)
+                    << "black mullions must stay dark against the dark stained-glass mean";
+                EXPECT_GT(baseline.mRadiance[glassPixel + 1], 0.1f)
+                    << "dark stained glass must glow with exterior sky radiance";
+
+                windowScene.addLight(Light{
+                    .mPosition = osg::Vec3f(0.0f, 132.0f, 120.0f),
+                    .mIntensity = osg::Vec3f(200000.0f, 200000.0f, 200000.0f),
+                    .mReach = 1200.0f,
+                    .mSourceRadius = 24.0f,
+                    .mClearance = 14.0f,
+                    .mTraits
+                    = Shaders::lightTraits(false, Shaders::MASK_EVERY_CLASS) | Shaders::LIGHT_WINDOW,
+                });
+
+                for (const std::uint32_t lampRays : { 1u, 2u })
+                {
+                    SCOPED_TRACE(lampRays);
+                    const Frame withWindowLight = shoot(
+                        windowScene, textures, camera, size, { .mIndirect = false, .mDirectLampRays = lampRays });
+                    for (std::uint32_t y = size / 4; y < 3 * size / 4; ++y)
+                    {
+                        for (std::uint32_t x = size / 4; x < 3 * size / 4; ++x)
+                        {
+                            const std::size_t idx = (std::size_t{ y } * size + x) * 4;
+                            EXPECT_NEAR(withWindowLight.mRadiance[idx + 0], baseline.mRadiance[idx + 0], 1e-5f);
+                            EXPECT_NEAR(withWindowLight.mRadiance[idx + 1], baseline.mRadiance[idx + 1], 1e-5f);
+                            EXPECT_NEAR(withWindowLight.mRadiance[idx + 2], baseline.mRadiance[idx + 2], 1e-5f);
+                        }
+                    }
+                }
+            }
+
+            // Part B: Direct sunlight enters through the dark stained-glass half (`u >= 0.5`) while
+            // staying blocked by the black mullion half (`u < 0.5`).
+            {
+                SceneDesc sunScene;
+                addQuad(sunScene, sheetAt(400.0f, 0.0f));
+                const Index diffuseTex
+                    = sunScene.textures().add(VFS::Path::NormalizedView("dark_stained.dds"), TextureWrap::Clamp);
+                const Index specTex = sunScene.textures().add(
+                    VFS::Path::NormalizedView("dark_stained_spec.dds"), TextureWrap::Repeat, TextureEncoding::Data);
+                const Index windowMat = sunScene.addMaterial(Material{
+                    .mDiffuse = diffuseTex,
+                    .mSpecular = specTex,
+                    .mSpecularClassic = true,
+                });
+                const std::array<osg::Vec3f, 4> windowQuad = uprightQuadAt(120.0f, 150.0f, osg::Vec2f(0.0f, 120.0f));
+                const Index windowMesh = sunScene.addMesh(
+                    MeshArrays{ .mPositions = windowQuad, .mTexCoords = sQuadUv, .mIndices = sQuadIndices });
+                sunScene.addInstance(
+                    MeshInstance{ .mMesh = windowMesh, .mMaterial = windowMat, .mWindowPortal = true });
+
+                Shaders::VisibilityConstants camera = Testing::makeCamera(
+                    osg::Vec3f(0.0f, -240.0f, 200.0f), osg::Vec3f(0.0f, 20.0f, 0.0f), 60.0f, size, size, 100000.0f);
+                osg::Vec3f sunDir(0.0f, 1.0f, 1.0f);
+                sunDir.normalize();
+                camera.mSun = Shaders::sunSource(sunDir, osg::Vec3f(2.0f, 2.0f, 2.0f));
+                camera.mSkyHorizon = osg::Vec3f();
+                camera.mSkyZenith = osg::Vec3f();
+                camera.mAmbient = osg::Vec3f();
+                camera.mSurfaceAmbient = osg::Vec3f();
+                camera.mInteriorWindow = 1u;
+                camera.mInteriorSun = 1u;
+                camera.mInteriorDust = Shaders::INTERIOR_DUST_EXTINCTION;
+                camera.mWindowSkyHorizon = osg::Vec3f(0.25f, 0.35f, 0.45f);
+                camera.mWindowSkyZenith = osg::Vec3f(0.15f, 0.35f, 0.65f);
+
+                shoot(sunScene, textures, camera, size, { .mIndirect = false });
+                std::vector<float> shadowed;
+                mProbe.readChannel(Channel::Shadowed, shadowed);
+                ASSERT_EQ(shadowed.size(), std::size_t{ size } * size * 4);
+
+                std::size_t glassLitPixels = 0;
+                std::size_t mullionLitPixels = 0;
+                // Exclude the 5-column seam band around `size / 2`: `sunSource` traces a 3-degree
+                // angular radius (`SUN_SHADOW_RADIUS`), casting a ~18-unit (~3-pixel) soft penumbra
+                // across the half-way divider onto nearby floor pixels.
+                for (std::uint32_t y = 0; y < size; ++y)
+                {
+                    for (std::uint32_t x = 0; x < size; ++x)
+                    {
+                        const std::size_t idx = (std::size_t{ y } * size + x) * 4;
+                        if (shadowed[idx] > 0.0f && Testing::shadowOpen(shadowed[idx + 3]))
+                        {
+                            if (x > size / 2 + 5)
+                                ++glassLitPixels;
+                            else if (x < size / 2 - 5)
+                                ++mullionLitPixels;
+                        }
+                    }
+                }
+                EXPECT_GT(glassLitPixels, 20u) << "sunlight must pass through dark stained glass";
+                EXPECT_EQ(mullionLitPixels, 0u) << "black mullions must block direct sunlight";
+            }
         }
     }
 }

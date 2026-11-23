@@ -817,5 +817,66 @@ namespace Rtx::Testing
             EXPECT_EQ(mScene.placements().getCounts().mWindowPortals, 0u);
             EXPECT_TRUE(mScene.isConsistent());
         }
+
+        TEST_F(RtxSceneExtractorTest, interiorWindowPortalsFallBackToUnlitIntDayPaneWhenNoEmissivePaneExists)
+        {
+            const auto makeBlendedRays = [] {
+                osg::ref_ptr<osg::Geometry> quad = makeQuad();
+                osg::StateSet& state = *quad->getOrCreateStateSet();
+                paint(state, "textures/oaab/glow/ray_alpha.dds");
+                state.setAttributeAndModes(
+                    new osg::BlendFunc(osg::BlendFunc::SRC_ALPHA, osg::BlendFunc::ONE_MINUS_SRC_ALPHA),
+                    osg::StateAttribute::ON);
+                return quad;
+            };
+            const auto makeUnlitPane = [] {
+                osg::ref_ptr<osg::Geometry> quad = makeQuad();
+                osg::StateSet& state = *quad->getOrCreateStateSet();
+                paint(state, "textures/tx_window_diamond_01.dds");
+                osg::ref_ptr<SceneUtil::Material> mat = new SceneUtil::Material;
+                mat->setDiffuse(osg::Vec4f(1.0f, 1.0f, 1.0f, 1.0f));
+                mat->setEmission(osg::Vec4f(0.0f, 0.0f, 0.0f, 1.0f));
+                state.setAttribute(mat);
+                return quad;
+            };
+
+            osg::ref_ptr<osg::Group> intDay = new osg::Group;
+            intDay->addChild(makeUnlitPane());
+            intDay->addChild(makeBlendedRays());
+
+            osg::ref_ptr<osg::Switch> nightDay = new osg::Switch;
+            nightDay->setName(Constants::NightDayLabel);
+            nightDay->addChild(makeQuad());
+            nightDay->addChild(new osg::Group);
+            nightDay->addChild(intDay);
+            nightDay->setSingleChildOn(2);
+
+            osg::ref_ptr<osg::Group> root = new osg::Group;
+            root->addChild(nightDay);
+
+            mExtractor.setInteriorWindowPortals(true);
+            walk(*root, 0, 0);
+            mExtractor.retire();
+            EXPECT_EQ(mScene.placements().getCounts().mPlaced, 1u);
+            EXPECT_EQ(mScene.placements().getCounts().mWindowPortals, 1u);
+            EXPECT_TRUE(mScene.isConsistent());
+
+            nightDay->setSingleChildOn(0);
+            mScene.clearPlacement();
+            walk(*root, 0, 1);
+            mExtractor.retire();
+            EXPECT_EQ(mScene.placements().getCounts().mPlaced, 1u);
+            EXPECT_EQ(mScene.placements().getCounts().mWindowPortals, 1u);
+            EXPECT_TRUE(mScene.isConsistent());
+
+            nightDay->setSingleChildOn(2);
+            mExtractor.setInteriorWindowPortals(false);
+            mScene.clearPlacement();
+            walk(*root, 0, 2);
+            mExtractor.retire();
+            EXPECT_EQ(mScene.placements().getCounts().mPlaced, 2u);
+            EXPECT_EQ(mScene.placements().getCounts().mWindowPortals, 0u);
+            EXPECT_TRUE(mScene.isConsistent());
+        }
     }
 }

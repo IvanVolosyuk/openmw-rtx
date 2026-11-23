@@ -42,6 +42,7 @@
 #include "meshreader.hpp"
 #include "mirroridentity.hpp"
 #include "nodekind.hpp"
+#include "surfacedescription.hpp"
 #include "worlddescent.hpp"
 
 namespace Rtx
@@ -146,6 +147,11 @@ namespace Rtx
         /// Descends into the children of `node` that are in the world. See below.
         void descend(osg::Node& node, NodeKind kind);
 
+        /// Returns whether `root` (an `INT-DAY` branch of `NightDaySwitch`) contains any non-blended
+        /// emissive window pane drawable, so meshes whose `INT-DAY` branch shares `OFF`'s unlit
+        /// `Window-mat` (e.g. OAAB's `imp_window_01.nif`) can fall back to tagging their panes.
+        bool intDayHasEmissivePane(osg::Node& root) const;
+
         /// Puts `stateSet` at the near end of the chain, with the fade resolved through it.
         void pushShading(const osg::StateSet& stateSet, bool animated);
 
@@ -209,6 +215,9 @@ namespace Rtx
 
         /// Whether traversal is currently inside a `NightDaySwitch` node.
         bool mNightDaySwitch = false;
+
+        /// Whether non-emissive opaque drawables under `INT-DAY` fall back to `mWindowPortal`.
+        bool mNightDayAllowUnlitPortal = false;
 
         /// `SceneExtractor::setJumped`, read once at `begin`.
         std::span<const osg::Node* const> mJumped;
@@ -302,6 +311,7 @@ namespace Rtx
         mJumping = false;
         mLampBody = false;
         mNightDaySwitch = false;
+        mNightDayAllowUnlitPortal = false;
         mFreezes = freezes;
         mChangeable = false;
 
@@ -421,6 +431,7 @@ namespace Rtx
         const bool outerJumping = mJumping;
         const bool outerLampBody = mLampBody;
         const bool outerNightDaySwitch = mNightDaySwitch;
+        const bool outerAllowUnlitPortal = mNightDayAllowUnlitPortal;
         mJumping = jumps(node);
 
         if (node.asSwitch() != nullptr && Misc::StringUtils::ciEqual(node.getName(), Constants::NightDayLabel))
@@ -456,9 +467,86 @@ namespace Rtx
         mJumping = outerJumping;
         mLampBody = outerLampBody;
         mNightDaySwitch = outerNightDaySwitch;
+        mNightDayAllowUnlitPortal = outerAllowUnlitPortal;
         mPathHash = above;
         --mDepth;
         mShading.resize(held);
+    }
+
+    bool SceneExtractor::Traversal::intDayHasEmissivePane(osg::Node& root) const
+    {
+        struct Probe final : osg::NodeVisitor
+        {
+            const SceneExtractor& mExtractor;
+            const NodeKinds& mKinds;
+            std::vector<Shading> mStack;
+            bool mFound = false;
+
+            Probe(const SceneExtractor& extractor, const NodeKinds& kinds, std::vector<Shading> stack,
+                osg::Node::NodeMask mask)
+                : osg::NodeVisitor(NODE_VISITOR, TRAVERSE_ALL_CHILDREN)
+                , mExtractor(extractor)
+                , mKinds(kinds)
+                , mStack(std::move(stack))
+            {
+                setTraversalMask(mask);
+            }
+
+            void apply(osg::Node& node) override
+            {
+                if (mFound)
+                    return;
+                const NodeKind kind = mKinds.of(node);
+                if (kind == NodeKind::ParticleProcessor || kind == NodeKind::ParticleUpdater
+                    || kind == NodeKind::LightSource)
+                    return;
+                if (const osg::StateSet* own = node.getStateSet(); own != nullptr && drawsIntoDistortion(*own))
+                    return;
+                if (const SceneUtil::LampBody* marker = SceneUtil::LampBody::find(node);
+                    marker != nullptr && marker->getLight() != nullptr && givesLight(*marker->getLight()))
+                    return;
+
+                const std::size_t held = mStack.size();
+                if (const osg::StateSet* own = node.getStateSet())
+                    mStack.push_back(Shading::under(mStack, *own, false, nullptr));
+
+                descendInWorld(
+                    node, kind, *this, [](osg::Sequence&) {}, [](unsigned int) {});
+
+                mStack.resize(held);
+            }
+
+            void apply(osg::Drawable& drawable) override
+            {
+                if (mFound)
+                    return;
+                const NodeKind kind = mKinds.of(drawable);
+                if (kind == NodeKind::ParticleSystem || mExtractor.isWater(drawable.getNodeMask()))
+                    return;
+                if (const osg::StateSet* own = drawable.getStateSet(); own != nullptr && drawsIntoDistortion(*own))
+                    return;
+
+                const std::size_t held = mStack.size();
+                if (const osg::StateSet* own = drawable.getStateSet())
+                    mStack.push_back(Shading::under(mStack, *own, false, nullptr));
+
+                SurfaceDescription described;
+                if (describeSurface(mStack, described) && described.mAlphaMode != AlphaMode::Blend)
+                {
+                    const bool emissive = described.getTexture(SurfaceMap::Emissive) != nullptr
+                        || described.mEmissiveColour.mRed > 0.0f || described.mEmissiveColour.mGreen > 0.0f
+                        || described.mEmissiveColour.mBlue > 0.0f;
+                    if (emissive)
+                        mFound = true;
+                }
+
+                mStack.resize(held);
+            }
+        };
+
+        Probe probe(mExtractor, mKinds, mShading, getTraversalMask());
+        root.accept(probe);
+        return probe.mFound;
     }
 
     /// Descends into the children of `node` that are in the world, and runs a flipbook's clock on
@@ -478,8 +566,12 @@ namespace Rtx
                 branches != nullptr && Misc::StringUtils::ciEqual(node.getName(), Constants::NightDayLabel)
                 && branches->getNumChildren() > 2)
             {
+                osg::Node* const intDay = branches->getChild(2);
+                const bool outerFallback = mNightDayAllowUnlitPortal;
+                mNightDayAllowUnlitPortal = !intDayHasEmissivePane(*intDay);
                 mChildIndex = 2;
-                branches->getChild(2)->accept(*this);
+                intDay->accept(*this);
+                mNightDayAllowUnlitPortal = outerFallback;
                 return;
             }
         }
@@ -618,7 +710,7 @@ namespace Rtx
             pushOwnShading(own, mExtractor.animate(drawable, placement));
 
         mChangeable |= mExtractor.addDrawable(drawable, placement, mShading, placed(), mClass, mInside, mJumping,
-            mLampBody, mNightDaySwitch, getNodePath());
+            mLampBody, mNightDaySwitch, mNightDayAllowUnlitPortal, getNodePath());
 
         mShading.resize(held);
     }
@@ -892,7 +984,8 @@ namespace Rtx
 
     bool SceneExtractor::addDrawable(const osg::Drawable& drawable, const std::size_t who,
         const std::span<const Shading> shading, const osg::Matrixf& place, const InstanceClass what, WalkGlows& glows,
-        const bool jumped, const bool lampBody, const bool nightDaySwitch, const std::span<osg::Node* const> path)
+        const bool jumped, const bool lampBody, const bool nightDaySwitch, const bool allowUnlitWindowPortal,
+        const std::span<osg::Node* const> path)
     {
         ExtractionStats& stats = mPass.getStats();
 
@@ -956,7 +1049,8 @@ namespace Rtx
         const bool emissive = resolvedMaterial != nullptr
             && (resolvedMaterial->mEmissive != sNoIndex || resolvedMaterial->mEmissiveColour.x() > 0.0f
                 || resolvedMaterial->mEmissiveColour.y() > 0.0f || resolvedMaterial->mEmissiveColour.z() > 0.0f);
-        const bool windowPortal = mInteriorWindowPortals && nightDaySwitch && !water && !lampBody && emissive;
+        const bool windowPortal = mInteriorWindowPortals && nightDaySwitch && !water && !lampBody
+            && (emissive || allowUnlitWindowPortal);
 
         // The slot this placement has held since it first appeared, so a world that stands
         // still writes nothing: the scene already knows where everything is, and only a transform

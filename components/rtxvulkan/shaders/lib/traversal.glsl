@@ -831,10 +831,29 @@ RayAsk passageAsk(vec3 from, vec3 towards, float distance, uint faces, bool near
         solidMask(frame.mRayMask) | MASK_MEDIUM, MEET_WALK_PAST, 0u, 0.0, 0.0, 0u, 0u));
 }
 
-/// Estimates window glass transmittance vs opaque lead/wood mullion bars from a window texel.
-float windowGlassMask(vec3 rgb)
+/// Perceptual + chroma-preserving brightness for window glass vs dark mullions so saturated
+/// stained glass (deep red, blue, or amber) remains distinct from black lead framing.
+float windowGlassBrightness(vec3 rgb)
 {
-    return smoothstep(WINDOW_MULLION_LOW, WINDOW_MULLION_HIGH, dot(rgb, LUMINANCE_WEIGHTS));
+    return max(dot(rgb, LUMINANCE_WEIGHTS), 0.35 * max(rgb.r, max(rgb.g, rgb.b)));
+}
+
+/// Mean brightness of a window texture from its coarsest mip, used to normalize mullion cutoffs
+/// across bright clear panes and dark stained-glass textures alike.
+float windowTextureRefBrightness(uint tex)
+{
+    if (!holdsTexture(tex))
+        return 1.0;
+
+    const float coarsest = float(max(textureQueryLevels(textures[nonuniformEXT(tex)]) - 1, 0));
+    const vec3 avg = textureLod(textures[nonuniformEXT(tex)], vec2(0.5), coarsest).rgb;
+    return max(windowGlassBrightness(avg), 1e-4);
+}
+
+/// Estimates window glass transmittance vs opaque lead/wood mullion bars from a window texel.
+float windowGlassMask(vec3 rgb, float refBrightness)
+{
+    return smoothstep(WINDOW_MULLION_LOW, WINDOW_MULLION_HIGH, windowGlassBrightness(rgb) / max(refBrightness, 1e-4));
 }
 
 /// Samples an interior `INSTANCE_WINDOW_PORTAL` hit to transmit sunlight through glass while letting
@@ -866,7 +885,7 @@ float windowPortalTransmittance(SceneAnswer met)
     const vec2 uv2 = uv[2] * transform.xy + transform.zw;
     const vec2 coord = acrossTriangle(uv0, uv1, uv2, met.mBary);
     const vec3 texel = textureLod(textures[nonuniformEXT(tex)], coord, 1.0).rgb;
-    return windowGlassMask(texel);
+    return windowGlassMask(texel, windowTextureRefBrightness(tex));
 }
 
 /// Exterior sky and sun glow visible through an interior window portal along `direction`.
@@ -1498,15 +1517,23 @@ Surface resolve(Hit hit, vec3 origin, vec3 direction, bool detailed)
     // by glass vs leaded-mullion luminance.
     if (frame.mInteriorWindow != 0u && (instance.mClass & INSTANCE_WINDOW_PORTAL) != 0u)
     {
-        const vec3 glassSample
-            = holdsTexture(material.mEmissive) ? (surface.mEmitted / EMISSIVE_INTENSITY) : albedo;
-        const float lum = dot(glassSample, LUMINANCE_WEIGHTS);
-        const float glassMask = windowGlassMask(glassSample);
-        const vec3 glassTint = clamp(glassSample * (glassMask / max(lum, 0.15)), vec3(0.0), vec3(1.5));
+        const bool useEmissive = holdsTexture(material.mEmissive);
+        const uint glassTex = useEmissive ? material.mEmissive : material.mDiffuse;
+        const vec3 glassSample = useEmissive
+            ? (surface.mEmitted / EMISSIVE_INTENSITY)
+            : (holdsTexture(material.mDiffuse) ? sampleDiffuse(material.mDiffuse, point).rgb : material.mDiffuseColour);
+        const float refBrightness = windowTextureRefBrightness(glassTex);
+        const float brightness = windowGlassBrightness(glassSample);
+        const float rel = brightness / refBrightness;
+        const float glassMask = smoothstep(WINDOW_MULLION_LOW, WINDOW_MULLION_HIGH, rel);
+        const float tone = clamp(0.45 + 0.55 * sqrt(min(rel, 2.0)), 0.0, 1.35);
+        const vec3 chroma = glassSample / max(brightness, 1e-4);
+        const vec3 glassTint = clamp(mix(vec3(1.0), chroma, 0.65) * (glassMask * tone), vec3(0.0), vec3(1.5));
         surface.mEmissiveColour = vec3(0.0);
         surface.mEmitted = windowSkyRadiance(direction) * glassTint;
         surface.mAlbedo *= 1.0 - 0.85 * glassMask;
         surface.mAmbientAlbedo *= 1.0 - 0.85 * glassMask;
+        surface.mSpecular *= 1.0 - 0.85 * glassMask;
     }
 
     return surface;

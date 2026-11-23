@@ -574,9 +574,11 @@ LightCandidate lampCandidateAt(GpuLight held, vec3 from, Facing facing, bool sid
 /// @param gloss the surface's specular half, with its diffuse albedo, which weigh a lamp as
 ///        `surfaceCandidate` says.
 /// @param lampLit whether the lamps light the surface at all — `Surface::mLampLit`.
+/// @param skipWindowLights whether to ignore synthetic `LIGHT_WINDOW` portal area lights (so
+///        `INSTANCE_WINDOW_PORTAL` panes do not reflect or receive their own inward emitter).
 /// @param candidates how many lamps to draw where the cell holds more, and nought for every one.
 void weighLamps(inout Reservoir kept, inout uint state, vec3 from, Facing facing, float scale, Gloss gloss,
-    bool lampLit, uint candidates)
+    bool lampLit, bool skipWindowLights, uint candidates)
 {
     const bool sided = dot(facing.mNormal, facing.mNormal) > 0.0;
 
@@ -595,6 +597,8 @@ void weighLamps(inout Reservoir kept, inout uint state, vec3 from, Facing facing
         const uint i = near.x + (sampled ? min(uint(randomNext(state) * float(count)), count - 1u) : step);
         const uint row = lightListAt(i);
         const GpuLight held = shownLightAt(row);
+        if (skipWindowLights && (held.mTraits & LIGHT_WINDOW) != 0u)
+            continue;
         const LightCandidate candidate = lampCandidateAt(held, from, facing, sided, scale, gloss);
 
         kept.mUnshadowed += candidate.mRadiance * (1.0 - candidate.mFresnel);
@@ -833,7 +837,7 @@ struct DirectLampSet
 };
 
 DirectLampSet weighDirectLamps(vec3 from, Facing facing, Gloss gloss, vec3 albedo, vec3 modulation, bool lampLit,
-    uint maxRays, inout uint state, out vec3 darkeningOut)
+    bool skipWindowLights, uint maxRays, inout uint state, out vec3 darkeningOut)
 {
     DirectLampSet set;
     set.mUnshadowed = vec3(0.0);
@@ -860,6 +864,8 @@ DirectLampSet weighDirectLamps(vec3 from, Facing facing, Gloss gloss, vec3 albed
     {
         const uint row = lightListAt(i);
         const GpuLight held = shownLightAt(row);
+        if (skipWindowLights && (held.mTraits & LIGHT_WINDOW) != 0u)
+            continue;
         const LightCandidate candidate = lampCandidateAt(held, from, facing, sided, INV_PI, gloss);
         const vec3 diffuse = candidate.mRadiance * (1.0 - candidate.mFresnel);
         const vec3 specular = gloss.mGlossy ? candidate.mSpecular : vec3(0.0);

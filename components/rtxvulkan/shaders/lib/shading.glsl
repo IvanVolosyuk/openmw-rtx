@@ -311,10 +311,14 @@ bool startGather(inout GatherRun run, inout SkyPassageRun skyPassage, Surface su
     if (!split || frame.mDirectLampRays <= 1u)
     {
         Reservoir kept = noLamps();
+        const bool windowPortal = surface.mHit && frame.mInteriorWindow != 0u
+            && (instanceAt(surface.mInstance).mClass & INSTANCE_WINDOW_PORTAL) != 0u;
         // **Every lamp at a split hit, whose unshadowed sum must be exact, and a fixed count of candidates
         // everywhere else** (`VisibilityConstants::mLampCandidates`): a path's far end and a pane cost what a
         // lamp-dense cell costs only where it is seen.
-        weighLamps(kept, state, position, facing, INV_PI, gloss, surface.mLampLit, split ? 0u : frame.mLampCandidates);
+        weighLamps(
+            kept, state, position, facing, INV_PI, gloss, surface.mLampLit, windowPortal,
+            split ? 0u : frame.mLampCandidates);
         kept.mFrom = leaving;
         run.mKept = kept;
         run.mLampDraw = lampDraw;
@@ -1077,8 +1081,10 @@ SolidLight solidLightOf(Surface surface, uvec2 pixel)
     {
         uint lampState = gather.mLampState;
         vec3 darkening = vec3(0.0);
+        const bool windowPortal = surface.mHit && frame.mInteriorWindow != 0u
+            && (instanceAt(surface.mInstance).mClass & INSTANCE_WINDOW_PORTAL) != 0u;
         const DirectLampSet lampSet = weighDirectLamps(surface.mPosition, facing, gloss, surface.mAlbedo, modulation,
-            surface.mLampLit, frame.mDirectLampRays, lampState, darkening);
+            surface.mLampLit, windowPortal, frame.mDirectLampRays, lampState, darkening);
         light.mLampRay = noRay();
         light.mLamps = surface.mAlbedo * max(lampSet.mUnshadowed - darkening, vec3(0.0));
         light.mLampSpecular = vec3(0.0);
