@@ -26,10 +26,13 @@ namespace MWRender
             .mBounceRays = Settings::rtx().mBounceRays,
             .mLamps = {
                 .mSourceScale = Settings::rtx().mLampSourceSize.get() / 25.0f,
+                .mClearanceScale = Settings::rtx().mLampShadowClearance.get() / 25.0f,
                 .mFlicker = Settings::rtx().mLampFlicker.get() / 100.0f,
                 .mSpeed = Settings::rtx().mLampSpeed.get() / 100.0f,
                 .mMovement = Settings::rtx().mLampMovement.get() / 100.0f,
                 .mSizeVariation = Settings::rtx().mLampBreathing.get() / 100.0f,
+                .mActorGlowSourceScale = Settings::rtx().mActorGlowSourceSize.get() / 100.0f,
+                .mActorGlowClearanceScale = Settings::rtx().mActorGlowClearance.get() / 100.0f,
             },
             .mInteriorWindowSunlight = Settings::rtx().mInteriorWindowSunlight,
             .mInteriorSunlightStrength = Settings::rtx().mInteriorSunlightStrength.get() / 100.0f,
@@ -60,6 +63,12 @@ namespace MWRender
         if (values.mBounceRays < 1 || std::cmp_greater(values.mBounceRays, Rtx::Shaders::MAX_BOUNCE_RAYS))
             throw Rtx::InputError(
                 std::format("{} bounce rays is outside one to {}", values.mBounceRays, Rtx::Shaders::MAX_BOUNCE_RAYS));
+        if (!(values.mLamps.mClearanceScale >= 0.0f && std::isfinite(values.mLamps.mClearanceScale)))
+            throw Rtx::InputError("lamp shadow clearance must be finite and non-negative");
+        if (!(values.mLamps.mActorGlowSourceScale > 0.0f && std::isfinite(values.mLamps.mActorGlowSourceScale)))
+            throw Rtx::InputError("actor glow source size must be finite and greater than zero");
+        if (!(values.mLamps.mActorGlowClearanceScale >= 0.0f && std::isfinite(values.mLamps.mActorGlowClearanceScale)))
+            throw Rtx::InputError("actor glow clearance must be finite and non-negative");
         if (!(values.mInteriorSunlightStrength >= 0.0f && values.mInteriorSunlightStrength <= 30.0f))
             throw Rtx::InputError("interior sunlight strength must be finite and between zero and 30.0");
         if (!(values.mInteriorWindowSkylight >= 0.0f && values.mInteriorWindowSkylight <= 30.0f))

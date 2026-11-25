@@ -18,6 +18,12 @@ namespace Settings
 
         SettingValue<std::int32_t> mLampSourceSize{ mIndex, "RTX", "lamp source size",
             makeClampSanitizerInt(1, 100) };
+        SettingValue<std::int32_t> mLampShadowClearance{ mIndex, "RTX", "lamp shadow clearance",
+            makeClampSanitizerInt(0, 200) };
+        SettingValue<std::int32_t> mActorGlowSourceSize{ mIndex, "RTX", "actor glow source size",
+            makeClampSanitizerInt(1, 100) };
+        SettingValue<std::int32_t> mActorGlowClearance{ mIndex, "RTX", "actor glow clearance",
+            makeClampSanitizerInt(0, 200) };
         SettingValue<std::int32_t> mLampFlicker{ mIndex, "RTX", "lamp flicker strength",
             makeClampSanitizerInt(0, 300) };
         SettingValue<std::int32_t> mLampSpeed{ mIndex, "RTX", "lamp animation speed",

@@ -482,8 +482,14 @@ namespace Rtx
                 EXPECT_EQ(light.mSourceRadius, stopped.mSourceRadius);
             }
             settings = {
-                .mSourceScale = 0.5f, .mFlicker = 2.0f, .mSpeed = 0.25f, .mMovement = 10.0f, .mSizeVariation = 0.8f
+                .mSourceScale = 0.5f,
+                .mClearanceScale = 2.0f,
+                .mFlicker = 2.0f,
+                .mSpeed = 0.25f,
+                .mMovement = 10.0f,
+                .mSizeVariation = 0.8f,
             };
+            EXPECT_FLOAT_EQ(stopped.mClearance, 0.0f);
             for (const double time : { 0.25, 1.375, 9000.0 })
             {
                 const Light light = *makeLight(record, position, time, id, settings).value();
@@ -491,6 +497,8 @@ namespace Rtx
                 EXPECT_EQ(light.mIntensity, byGraph.mIntensity);
                 EXPECT_EQ(light.mPosition, byGraph.mPosition);
                 EXPECT_EQ(light.mSourceRadius, byGraph.mSourceRadius);
+                EXPECT_EQ(light.mClearance, byGraph.mClearance);
+                EXPECT_FLOAT_EQ(light.mClearance, stopped.mSourceRadius * settings.mClearanceScale);
                 EXPECT_EQ(light.mReach, stopped.mReach);
                 auto resized = settings;
                 resized.mSourceScale *= 2.0f;
@@ -498,6 +506,8 @@ namespace Rtx
                 EXPECT_EQ(larger.mPosition, light.mPosition);
                 EXPECT_EQ(larger.mIntensity, light.mIntensity);
                 EXPECT_FLOAT_EQ(larger.mSourceRadius, light.mSourceRadius * 2.0f);
+                EXPECT_FLOAT_EQ(larger.mClearance, light.mClearance);
+                EXPECT_EQ(larger.mReach, light.mReach);
                 auto faster = settings;
                 faster.mSpeed *= 2.0f;
                 const Light fast = *makeLight(record, position, time, id, faster).value();
@@ -865,6 +875,51 @@ namespace Rtx
 
             glow.mLit = true;
             EXPECT_TRUE(isNothing(glow.makeLight())) << "the game's own light is the effect's";
+        }
+
+        TEST(RtxLightBuilderTest, actorGlowSourceAndClearanceScaleIndependentlyKeepingReachAndEffectUnchanged)
+        {
+            const std::vector<Sprite> sprites{
+                Sprite{ .mPosition = osg::Vec3f(100.0f, 0.0f, 4.0f),
+                    .mRadius = 6.0f,
+                    .mColour = osg::Vec3f(1.0f, 0.5f, 0.0f),
+                    .mAlpha = 0.5f },
+                Sprite{ .mPosition = osg::Vec3f(100.0f, 0.0f, 18.0f),
+                    .mRadius = 2.0f,
+                    .mColour = osg::Vec3f(1.0f, 1.0f, 1.0f),
+                    .mAlpha = 1.0f },
+            };
+            const osg::Vec3f mean(0.5f, 0.25f, 0.0f);
+
+            SpriteEmitter flames{};
+            flames.mCentre = osg::Vec3f(100.0f, 0.0f, 10.0f);
+            flames.mReach = 8.0f;
+            flames.mFirst = 0;
+            flames.mCount = 2;
+            flames.mFlags = Shaders::EMITTER_ADDITIVE;
+
+            const LampSettings scaled{ .mActorGlowSourceScale = 0.25f, .mActorGlowClearanceScale = 1.5f };
+
+            Glow actorGlow;
+            actorGlow.mClasses = Shaders::MASK_ACTOR;
+            actorGlow.addSprites(flames, sprites, mean);
+            const std::optional<Light> actorBase = actorGlow.makeLight().value();
+            const std::optional<Light> actorScaled = actorGlow.makeLight(scaled).value();
+            ASSERT_TRUE(actorBase.has_value());
+            ASSERT_TRUE(actorScaled.has_value());
+            EXPECT_FLOAT_EQ(actorScaled->mSourceRadius, actorBase->mSourceRadius * 0.25f);
+            EXPECT_FLOAT_EQ(actorScaled->mClearance, actorBase->mClearance * 1.5f);
+            EXPECT_FLOAT_EQ(actorScaled->mReach, actorBase->mReach);
+            EXPECT_EQ(actorScaled->mIntensity, actorBase->mIntensity);
+
+            Glow effectGlow;
+            effectGlow.mClasses = Shaders::MASK_EFFECT;
+            effectGlow.addSprites(flames, sprites, mean);
+            const std::optional<Light> effectScaled = effectGlow.makeLight(scaled).value();
+            ASSERT_TRUE(effectScaled.has_value());
+            EXPECT_FLOAT_EQ(effectScaled->mSourceRadius, 8.0f);
+            EXPECT_FLOAT_EQ(effectScaled->mClearance, 8.0f);
+            EXPECT_FLOAT_EQ(effectScaled->mReach, 128.0f);
         }
     }
 }

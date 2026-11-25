@@ -25,15 +25,21 @@ namespace Rtx
 {
     struct Material;
 
-    /// Frame-owned lamp controls. Source scale is relative to the sharpened source radius;
-    /// animation amplitudes and speed are independent of source size and illumination reach.
+    /// Frame-owned lamp controls. Source scale and shadow clearance are relative to the sharpened
+    /// base source radius (`mClearanceScale` independently sets `mClearance`); animation amplitudes
+    /// and speed are independent of source size and illumination reach; actor glow multipliers scale
+    /// `Glow::makeLight` `mSourceRadius` and `mClearance` when `MASK_ACTOR` is set while preserving
+    /// reach and intensity.
     struct LampSettings
     {
         float mSourceScale = 1.0f;
+        float mClearanceScale = 0.0f;
         float mFlicker = 1.0f;
         float mSpeed = 1.0f;
         float mMovement = 1.0f;
         float mSizeVariation = 0.1f;
+        float mActorGlowSourceScale = 1.0f;
+        float mActorGlowClearanceScale = 1.0f;
     };
 
     /// Whether a `LIGH` reference standing in a cell casts at all, as the game rules it: off by
@@ -192,7 +198,7 @@ namespace Rtx
         /// the fire burst, which is a sphere, and twice the truth for a lone flat sheet. The flames' is `pi` times what
         /// `addSprites` summed. The intensity is derived and not read off a record, so what a burst is worth against
         /// the lamps of the room is set by eye (`sGlowGain` and `sGlowReachScale`).
-        Result<std::optional<Light>, std::string_view> makeLight() const;
+        Result<std::optional<Light>, std::string_view> makeLight(const LampSettings& settings = {}) const;
     };
 
 }

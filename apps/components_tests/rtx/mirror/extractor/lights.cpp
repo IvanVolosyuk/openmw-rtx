@@ -548,6 +548,50 @@ namespace Rtx::Testing
             EXPECT_EQ(mExtractor.countPastRoom(), PastRoom{});
         }
 
+        TEST_F(RtxSceneExtractorTest, actorGlowSettingsScaleCreatureRadiusAndClearanceIndependently)
+        {
+            constexpr osg::Node::NodeMask sActor = 1u << 2;
+            constexpr osg::Node::NodeMask sEffect = 1u << 5;
+            mExtractor.setClassMask(Rtx::InstanceClass::Actor, sActor);
+            mExtractor.setClassMask(Rtx::InstanceClass::Effect, sEffect);
+
+            osg::ref_ptr<osg::Image> map = Testing::makeImage("textures/creature_glow_scale.tga", 1, 1);
+            for (std::size_t channel = 0; channel < 4; ++channel)
+                map->data()[channel] = 255;
+
+            const Plume plume = makePlume(osg::Matrix::translate(0.0, 0.0, 10.0), true, map);
+            emit(*plume.mParticles, osg::Vec3f(), 4.0f, osg::Vec4f(1.0f, 0.3f, 0.0f, 1.0f));
+
+            osg::ref_ptr<osg::Group> actor = new osg::Group;
+            actor->setNodeMask(sActor);
+            actor->addChild(plume.mRoot);
+
+            walk(*actor);
+            ASSERT_EQ(mScene.lights().size(), 1u);
+            const Rtx::Light base = mScene.lights().front();
+
+            mExtractor.setLampSettings(
+                Rtx::LampSettings{ .mActorGlowSourceScale = 0.25f, .mActorGlowClearanceScale = 1.5f });
+            mScene.clearPlacement();
+            walk(*actor);
+            ASSERT_EQ(mScene.lights().size(), 1u);
+            const Rtx::Light scaled = mScene.lights().front();
+            EXPECT_FLOAT_EQ(scaled.mSourceRadius, base.mSourceRadius * 0.25f);
+            EXPECT_FLOAT_EQ(scaled.mClearance, base.mClearance * 1.5f);
+            EXPECT_FLOAT_EQ(scaled.mReach, base.mReach);
+            EXPECT_EQ(scaled.mIntensity, base.mIntensity);
+
+            actor->setNodeMask(sEffect);
+            mScene.clearPlacement();
+            walk(*actor);
+            ASSERT_EQ(mScene.lights().size(), 1u);
+            const Rtx::Light effect = mScene.lights().front();
+            EXPECT_FLOAT_EQ(effect.mSourceRadius, base.mSourceRadius);
+            EXPECT_FLOAT_EQ(effect.mClearance, base.mClearance);
+            EXPECT_FLOAT_EQ(effect.mReach, base.mReach);
+            EXPECT_EQ(effect.mIntensity, base.mIntensity);
+        }
+
         /// A lamp the record says animates is mirrored at the instant the walk was told, not at rest.
         ///
         /// **Because nothing else here would do it.** The game animates its lights in the update traversal,

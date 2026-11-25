@@ -290,7 +290,7 @@ namespace MWGui
 
         MyGUI::ScrollView* rayTracingScroll = nullptr;
         getWidget(rayTracingScroll, "RayTracingScroll");
-        rayTracingScroll->setCanvasSize(420, 756);
+        rayTracingScroll->setCanvasSize(420, 900);
         rayTracingScroll->setVisibleHScroll(false);
 
         configureWidgets(mMainWidget, true);

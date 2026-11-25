@@ -868,6 +868,9 @@ namespace MWRender
     {
         expectGameCall();
         const bool lamps = changed.contains({ "RTX", "lamp source size" })
+            || changed.contains({ "RTX", "lamp shadow clearance" })
+            || changed.contains({ "RTX", "actor glow source size" })
+            || changed.contains({ "RTX", "actor glow clearance" })
             || changed.contains({ "RTX", "lamp flicker strength" })
             || changed.contains({ "RTX", "lamp animation speed" }) || changed.contains({ "RTX", "lamp movement" })
             || changed.contains({ "RTX", "lamp size variation" });

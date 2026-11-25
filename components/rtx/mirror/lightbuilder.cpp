@@ -229,8 +229,10 @@ namespace Rtx
             if (made.isOk() && made.value().has_value())
             {
                 Light& light = *made.value();
-                light.mPosition += variation.mOffset * light.mSourceRadius;
+                const float baseSourceRadius = light.mSourceRadius;
+                light.mPosition += variation.mOffset * baseSourceRadius;
                 light.mSourceRadius *= variation.mSourceScale * settings.mSourceScale;
+                light.mClearance = baseSourceRadius * settings.mClearanceScale;
             }
             return made;
         }
@@ -386,7 +388,7 @@ namespace Rtx
         mBall.expandBy(osg::BoundingSpheref(emitter.mCentre, emitter.mReach));
     }
 
-    Result<std::optional<Light>, std::string_view> Glow::makeLight() const
+    Result<std::optional<Light>, std::string_view> Glow::makeLight(const LampSettings& settings) const
     {
         // An effect of nothing, or of a point, glows nothing; a ball that is not a number is not
         // `valid` either, and goes on to be refused with the rest of what is not finite.
@@ -404,12 +406,15 @@ namespace Rtx
         // clearance too, so the ray stops at the ball and nothing inside it casts a shadow;
         // `weighLamps` reads the fill to light what is inside from every side.
         const float radius = mBall.radius();
+        const bool actor = (mClasses & Shaders::MASK_ACTOR) != 0u;
+        const float sourceRadius = actor ? radius * settings.mActorGlowSourceScale : radius;
+        const float clearance = actor ? radius * settings.mActorGlowClearanceScale : radius;
         return finiteOnly(Light{
             .mPosition = mBall.center(),
             .mIntensity = intensity * sGlowGain,
             .mReach = radius * sGlowReachScale,
-            .mSourceRadius = radius,
-            .mClearance = radius,
+            .mSourceRadius = sourceRadius,
+            .mClearance = clearance,
             .mTraits = Shaders::lightTraits(true, mClasses),
         });
     }
