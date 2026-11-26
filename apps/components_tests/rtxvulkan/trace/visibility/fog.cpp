@@ -1342,6 +1342,102 @@ namespace Rtx::Testing
                 << "and the sun was strong enough to show if unblocked";
         }
 
+        TEST_F(RtxVisibilityTest, anOccludedLampBehindASingleSidedWallLeaksNoFogGlowEvenBesideAVisibleLamp)
+        {
+            SceneIdentities identities;
+            constexpr std::uint32_t size = 33;
+            constexpr std::size_t centre = centreValueOf(size);
+
+            const auto render = [&](float wallY, bool includeOccluded) {
+                SceneDesc scene(identities);
+                addQuad(scene, uprightQuadAt(40000.0f, wallY),
+                    scene.addMaterial(Material{ .mDiffuseColour = osg::Vec3f(), .mTwoSided = false }));
+
+                // A visible lamp in front of the wall in the same room.
+                scene.addLight(Light{
+                    .mPosition = osg::Vec3f(120.0f, -150.0f, 40.0f),
+                    .mIntensity = osg::Vec3f(5000.0f, 5000.0f, 5000.0f),
+                    .mReach = 600.0f,
+                    .mSourceRadius = 4.0f,
+                    .mTraits = Shaders::lightTraits(false, Shaders::MASK_STATIC),
+                });
+
+                if (includeOccluded)
+                    scene.addLight(Light{
+                        .mPosition = osg::Vec3f(0.0f, 60.0f, 0.0f),
+                        .mIntensity = osg::Vec3f(50000.0f, 25000.0f, 5000.0f),
+                        .mReach = 600.0f,
+                        .mSourceRadius = 4.0f,
+                        .mClearance = 16.0f,
+                        .mTraits = Shaders::lightTraits(false, Shaders::MASK_STATIC),
+                    });
+
+                Shaders::VisibilityConstants camera = Testing::makeCamera(
+                    osg::Vec3f(0.0f, -400.0f, 0.0f), osg::Vec3f(0.0f, 0.0f, 0.0f), 60.0f, size, size, 100000.0f);
+                litThroughFog(camera, 1.0e-3f);
+                camera.mFogColour = osg::Vec3f();
+                camera.mSkyHorizon = osg::Vec3f();
+                camera.mSkyZenith = osg::Vec3f();
+                camera.mAmbientFromSky = 0.0f;
+
+                return std::int32_t{ shoot(scene, {}, camera, size).byte(centre) };
+            };
+
+            const std::int32_t frontOnly = render(0.0f, false);
+            const std::int32_t withOccluded = render(0.0f, true);
+            EXPECT_EQ(withOccluded, frontOnly);
+
+            const std::int32_t unblocked = render(400.0f, true);
+            EXPECT_GT(unblocked, frontOnly + 20) << "the unblocked lamp behind y=0 lights the air along the view";
+        }
+
+        TEST_F(RtxVisibilityTest, aDistantLampProducesNoExplodingSpikeAcrossSubFroxelOffsets)
+        {
+            SceneIdentities identities;
+            constexpr std::uint32_t size = 128;
+
+            const auto peakForOffset = [&](const float xOffset) {
+                SceneDesc scene(identities);
+                addQuad(scene, sheetAt(4000.0f, -200000.0f));
+
+                scene.addLight(Light{
+                    .mPosition = osg::Vec3f(0.0f, 0.0f, 0.0f),
+                    .mIntensity = osg::Vec3f(50000.0f, 25000.0f, 5000.0f),
+                    .mReach = 512.0f,
+                    .mSourceRadius = 6.0f,
+                    .mTraits = Shaders::lightTraits(false, Shaders::MASK_STATIC),
+                });
+
+                Shaders::VisibilityConstants camera = Testing::makeCamera(
+                    osg::Vec3f(0.0f, -8000.0f, 0.0f), osg::Vec3f(xOffset, 0.0f, 0.0f), 60.0f, size, size, 100000.0f);
+                litThroughFog(camera, 5.0e-5f);
+                camera.mFogColour = osg::Vec3f();
+                camera.mSkyHorizon = osg::Vec3f();
+                camera.mSkyZenith = osg::Vec3f();
+                camera.mAmbientFromSky = 0.0f;
+
+                const std::vector<float> radiance = shoot(scene, {}, camera, size, { .mFrames = 16 }).mRadiance;
+                float peak = 0.0f;
+                for (std::size_t i = 0; i < radiance.size(); i += 4)
+                {
+                    EXPECT_TRUE(std::isfinite(radiance[i]));
+                    peak = std::max(peak, radiance[i]);
+                }
+                return peak;
+            };
+
+            const std::array<float, 3> peaks{
+                peakForOffset(0.0f),
+                peakForOffset(30.0f),
+                peakForOffset(60.0f),
+            };
+            const float minimum = *std::min_element(peaks.begin(), peaks.end());
+            const float maximum = *std::max_element(peaks.begin(), peaks.end());
+            EXPECT_GT(minimum, 0.0f);
+            EXPECT_LT(maximum, 0.5f) << "distant sub-froxel torch does not explode into a screen-space flare";
+            EXPECT_LT(maximum, 3.0f * minimum) << "halo stays stable as the froxel ray sweeps past the lamp";
+        }
+
         /// A point under a bank's top is lit as the clear air its slant to the sun crosses (`slantCoverage`).
         /// The field (`VulkanRenderer::setFogField`) is full in the lower half of the tile's height and empty in
         /// the upper at every level, each scale's offset putting the change at z = 600 (the turns and warp are

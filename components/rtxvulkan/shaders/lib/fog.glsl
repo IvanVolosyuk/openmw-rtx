@@ -227,10 +227,10 @@ FogSlice fogSliceAt(vec2 across, float depth)
         textureLod(fogSliceSunward, vec3(across, depth), 0.0).x);
 }
 
-void addFogColumnCorner(ivec2 at, int sliceIndex, float depth, float near, float weight,
+void addFogColumnCorner(ivec2 at, int sliceIndex, float depth, float minDepth, float weight,
     inout vec4 airSum, inout float sunSum, inout float total)
 {
-    if (weight > 0.0 && depth > near)
+    if (weight > 0.0 && depth > minDepth)
     {
         airSum += weight * texelFetch(fogVolumeAir, ivec3(at, sliceIndex), 0);
         sunSum += weight * texelFetch(fogVolumeSunward, ivec3(at, sliceIndex), 0).x;
@@ -240,7 +240,7 @@ void addFogColumnCorner(ivec2 at, int sliceIndex, float depth, float near, float
 
 FogColumn fogColumnAtFiltered(vec2 across, ivec2 c0, ivec2 c1, vec2 wxy, vec4 depths, uint sliceIndex)
 {
-    const float near = froxelNear(sliceIndex);
+    const float far = froxelFar(sliceIndex);
     const int s = int(sliceIndex);
     const float wx0 = 1.0 - wxy.x;
     const float wx1 = wxy.x;
@@ -251,10 +251,10 @@ FogColumn fogColumnAtFiltered(vec2 across, ivec2 c0, ivec2 c1, vec2 wxy, vec4 de
     float sunSum = 0.0;
     float total = 0.0;
 
-    addFogColumnCorner(ivec2(c0.x, c0.y), s, depths.x, near, wx0 * wy0, airSum, sunSum, total);
-    addFogColumnCorner(ivec2(c1.x, c0.y), s, depths.y, near, wx1 * wy0, airSum, sunSum, total);
-    addFogColumnCorner(ivec2(c0.x, c1.y), s, depths.z, near, wx0 * wy1, airSum, sunSum, total);
-    addFogColumnCorner(ivec2(c1.x, c1.y), s, depths.w, near, wx1 * wy1, airSum, sunSum, total);
+    addFogColumnCorner(ivec2(c0.x, c0.y), s, depths.x, far, wx0 * wy0, airSum, sunSum, total);
+    addFogColumnCorner(ivec2(c1.x, c0.y), s, depths.y, far, wx1 * wy0, airSum, sunSum, total);
+    addFogColumnCorner(ivec2(c0.x, c1.y), s, depths.z, far, wx0 * wy1, airSum, sunSum, total);
+    addFogColumnCorner(ivec2(c1.x, c1.y), s, depths.w, far, wx1 * wy1, airSum, sunSum, total);
 
     if (total > 0.0)
         return unpackFogColumn(airSum / total, sunSum / total);
@@ -505,35 +505,41 @@ float fogColumn(vec3 origin, vec3 direction, float span)
     return fogColumnOver(fogRayFrom(origin, direction), span);
 }
 
-/// Weighs every lamp reaching a stretch of a ray into `kept`, and returns what they scatter into it.
-///
-/// One walk of the light grid rather than one per step, which is the cost that made the air expensive in a
-/// room: a cell's list is the same over the stretch the ray spends in it, so it is asked once. The air's
-/// density and what is left of the ray are read at the lamp's closest approach, held inside the stretch.
-///
-/// The sum and the reservoir are one estimator: every lamp is offered with the weight of its share of the
-/// sum, so the one held is drawn in proportion to its contribution and the sum times what the held lamp's ray let through carries the
-/// expectation of the whole sum shadowed lamp by lamp, exactly. What is left of the draw is which lamp the
-/// one ray goes to.
-vec3 lampsInAir(inout Reservoir kept, inout uint state, vec3 origin, vec3 direction, float entry, float exit,
-    out float phaseShare)
+/// What `lampsInAir` collects along one froxel's middle stretch: the isotropic irradiance for
+/// smoke/puffs (`fogLamps`) and the two strata of phase-weighted lamp scatter (`mTop*` for the
+/// dominant lamp along the sightline, `mRest*` for all remaining lamps via RIS) so each stratum
+/// carries its own shadow ray and Mie phase without bleeding across walls.
+struct AirLamps
 {
-    // **What the lamps send toward the eye, against what they leave the air with**: the medium's phase, as the sun
-    // and the moons take it, evaluated per lamp at the middle of its stretch, as a share of the isotropic sum that
-    // is returned. One share for the lamps' mix, weighted by each one's light: the sum stays isotropic, because a
-    // puff reads what the air holds and lights its card by it (`puffLight`), and the eye reads the share beside it.
-    phaseShare = 1.0;
-    float phased = 0.0;
-    float lit = 0.0;
+    /// Isotropic sum over the stretch (`E / 4pi`), written to `fogLamps` for `puffLight`.
+    vec3 mIsotropic;
+
+    /// Strongest phased lamp along the stretch (row, phased scatter, and luminance weight).
+    uint mTopRow;
+    vec3 mTopPhased;
+    float mTopWeight;
+
+    /// Remaining lamps along the stretch: summed phased scatter, RIS-drawn row, and total weight.
+    vec3 mRestPhased;
+    uint mRestRow;
+    float mRestWeight;
+};
+
+/// Weighs every lamp reaching a stretch of a ray into `mTop*` and `mRest*` (`AirLamps`), and
+/// accumulates their isotropic share into `mIsotropic`.
+AirLamps lampsInAir(inout uint state, vec3 origin, vec3 direction, float entry, float exit)
+{
+    AirLamps outLamps = AirLamps(vec3(0.0), LAMP_LIST_NONE, vec3(0.0), 0.0, vec3(0.0), LAMP_LIST_NONE, 0.0);
 
     // None, for a picture no lamp lights: one answer for the whole frame.
     if (frame.mNoLamps != 0u)
-        return vec3(0.0);
+        return outLamps;
 
     const float side = 1.0 / frame.mLightGrid.mInverseCell;
     const vec3 beyond = frame.mLightGrid.mOrigin + vec3(frame.mLightGrid.mSize) * side;
 
-    vec3 scattered = vec3(0.0);
+    Reservoir rest = noLamps();
+    vec3 totalPhased = vec3(0.0);
 
     // Clipped to the grid before the walk, so the budget above is spent inside it: a ray that starts
     // outside would otherwise cross empty cells until it ran out.
@@ -542,7 +548,7 @@ vec3 lampsInAir(inout Reservoir kept, inout uint state, vec3 origin, vec3 direct
         if (abs(direction[axis]) < 1.0e-8)
         {
             if (origin[axis] < frame.mLightGrid.mOrigin[axis] || origin[axis] >= beyond[axis])
-                return scattered;
+                return outLamps;
             continue;
         }
 
@@ -553,7 +559,9 @@ vec3 lampsInAir(inout Reservoir kept, inout uint state, vec3 origin, vec3 direct
     }
 
     if (!(exit > entry))
-        return scattered;
+        return outLamps;
+
+    const Cone eyeCone = coneAt(frame.mEyes.mWorld);
 
     // The cell the ray enters, and for each axis the `t` of its next boundary and the `t` between
     // boundaries after that — a digital differential analyser, so the cell is carried rather than
@@ -610,23 +618,49 @@ vec3 lampsInAir(inout Reservoir kept, inout uint state, vec3 origin, vec3 direct
 
             // The falloff stands in for a mean and is the one thing approximated: a lamp's falloff and the
             // air's density do not correlate over the stretch, the one varying over a lamp's reach and the
-            // other over a scale height.
-            const float crossed = falloffAlong(perpendicular, low, high, held.mReach, held.mSourceRadius);
+            // other over a scale height. Prefilter source radius by the froxel column's angular half-width
+            // so distant small torches cannot spike into the inverse-square singularity or Mie forward peak.
+            const float sampleAlong = max(closest + 0.5 * (low + high), 0.0);
+            const float froxelHalfWidth
+                = 0.5 * float(FOG_VOLUME_SCALE) * (eyeCone.mWidth + eyeCone.mSpread * sampleAlong);
+            const float effectiveRadius = max(held.mSourceRadius, froxelHalfWidth);
+            const float maxSoft = max(held.mSourceRadius, 0.5 * held.mReach);
+            const float softRadius = min(effectiveRadius, maxSoft);
+            const float radiusRatio = softRadius / max(effectiveRadius, 1.0e-4);
+            const float crossed
+                = falloffAlong(perpendicular, low, high, held.mReach, softRadius) * (radiusRatio * radiusRatio);
 
             const vec3 share = held.mIntensity * (INV_FOUR_PI * crossed);
-            scattered += share;
-            considerLamp(kept, state, airCandidate(share), row);
+            outLamps.mIsotropic += share;
 
             // Seen from the middle of what the lamp reaches of the stretch: the angle the light turns there to
-            // reach the eye, as `fogPhase` takes the sun's, and no nearer the lamp's line than its source's edge,
-            // as a moon is held to its limb: a lamp has a size, and the peak a point would throw it does not.
-            const vec3 toLamp = held.mPosition - (origin + direction * (closest + 0.5 * (low + high)));
+            // reach the eye, as `fogPhase` takes the sun's, held to the larger of the source's limb and the
+            // froxel column's own half-width so distant sub-froxel lamps cannot alias into the Mie peak.
+            const vec3 toLamp = held.mPosition - (origin + direction * sampleAlong);
             const float away = length(toLamp);
-            const float limb = away / sqrt(away * away + held.mSourceRadius * held.mSourceRadius);
+            const float limb = away / sqrt(away * away + effectiveRadius * effectiveRadius);
             const float cosine = away > 0.0 ? min(dot(toLamp, direction) / away, limb) : 0.0;
-            const float weight = dot(share, LUMINANCE_WEIGHTS);
-            phased += weight * (fogPhase(cosine) / INV_FOUR_PI);
-            lit += weight;
+            const vec3 phasedShare = share * (fogPhase(cosine) / INV_FOUR_PI);
+            const float phasedWeight = dot(phasedShare, LUMINANCE_WEIGHTS);
+            totalPhased += phasedShare;
+
+            if (row == outLamps.mTopRow)
+            {
+                outLamps.mTopPhased += phasedShare;
+                outLamps.mTopWeight += phasedWeight;
+            }
+            else if (phasedWeight > outLamps.mTopWeight)
+            {
+                if (outLamps.mTopRow != LAMP_LIST_NONE)
+                    considerLamp(rest, state, airCandidate(outLamps.mTopPhased), outLamps.mTopRow);
+                outLamps.mTopRow = row;
+                outLamps.mTopPhased = phasedShare;
+                outLamps.mTopWeight = phasedWeight;
+            }
+            else if (phasedWeight > 0.0)
+            {
+                considerLamp(rest, state, airCandidate(phasedShare), row);
+            }
         }
 
         if (leave >= exit)
@@ -638,8 +672,10 @@ vec3 lampsInAir(inout Reservoir kept, inout uint state, vec3 origin, vec3 direct
         behind = leave;
     }
 
-    phaseShare = lit > 0.0 ? phased / lit : 1.0;
-    return scattered;
+    outLamps.mRestPhased = max(totalPhased - outLamps.mTopPhased, vec3(0.0));
+    outLamps.mRestRow = rest.mWeight > 0.0 ? rest.mLamp : LAMP_LIST_NONE;
+    outLamps.mRestWeight = rest.mTotal;
+    return outLamps;
 }
 
 /// How much of the edge's ramp a ray has crossed by `distance` of range from the eye, as a share of the

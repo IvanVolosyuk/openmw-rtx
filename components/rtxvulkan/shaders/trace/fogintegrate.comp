@@ -43,18 +43,20 @@ ivec2 fogTentAt(ivec2 column, int i, ivec2 grid)
 /// by each column rather than through a shared tile: that cost the pass 16 to 29% more at scale 12, where the
 /// texture cache already served what the nine columns share. Across the screen and never along the ray.
 ///
-/// The lamps' delivery is an integral over the froxel with no draw, and the ray's answer is filtered over ten
-/// frames and nine neighbours; multiplying them here lets each be treated as what it is.
+/// Shadowed phased lamp scatter rides in `fogScatter` (`mSource`), while `fogSeeing` carries averaged
+/// visibility (`mLampsSeen`) for `puffLight`.
 FogSlice sliceAt(ivec2 column, uint slice, ivec2 grid, float surfaces[9], out vec4 averaged)
 {
     const float near = froxelNear(slice);
+    const float far = froxelFar(slice);
+    const bool centerFull = surfaces[4] >= far;
 
     vec4 point = vec4(0.0);
     vec4 seeing = vec4(0.0);
     float total = 0.0;
     for (int i = 0; i < 9; ++i)
     {
-        if (!(surfaces[i] > near))
+        if (!(surfaces[i] > near) || (centerFull && !(surfaces[i] >= far)))
             continue;
 
         const ivec2 at = fogTentAt(column, i, grid);
@@ -76,13 +78,9 @@ FogSlice sliceAt(ivec2 column, uint slice, ivec2 grid, float surfaces[9], out ve
     seeing /= total;
     averaged = seeing;
 
-    // What the air holds of the lamps, turned toward the eye by the share their phase gives it (`lampsInAir`).
-    const vec4 lampsHeld = texelFetch(fogLamps, ivec3(column, int(slice)), 0);
-    const vec3 lamps = lampsHeld.xyz * lampsHeld.w;
     const FogPoint held = unpackFogPoint(point, seeing);
 
-    return FogSlice(held.mSource + lamps * (held.mSeeing.mLampsSeen * held.mDensity), held.mDensity,
-        held.mSeeing.mSunSource);
+    return FogSlice(held.mSource, held.mDensity, held.mSeeing.mSunSource);
 }
 
 void main()
