@@ -274,7 +274,7 @@ TracedLists tracePixel(uvec2 pixel)
         = waterUnbounded(answer.mHit, origin, direction) ? WATER_UNBOUNDED_PATH : answer.mDistance;
     bool columnMarches;
     const MediumAhead ahead
-        = mediumAheadOf(pixel, path, answer.mDistance, waterDistance, vec3(1.0), columnMarches);
+        = mediumAheadOf(pixel, path, answer.mDistance, waterDistance, answer.mHit, vec3(1.0), columnMarches);
     marches = marches || columnMarches;
 
     // **The eye the pixel's ray ended in**, whose cone the rest of the path is charged through: it

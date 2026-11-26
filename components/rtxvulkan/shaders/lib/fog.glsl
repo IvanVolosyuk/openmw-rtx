@@ -719,7 +719,7 @@ vec4 fogAlongLeg(vec3 origin, vec3 direction, float span, float before)
 /// The edge stands beyond the weather and not in front of it, where its air actually is: its density is
 /// nothing until the last quarter of the reach, so what it scatters arrives dimmed by the whole of the
 /// weather's air in front of it.
-vec4 fogAlong(uvec2 pixel, WorldRay ray, float distance)
+vec4 fogAlong(uvec2 pixel, WorldRay ray, float distance, bool hit)
 {
     // Air only, and an eye under the surface has none in front of it: the water stands in front, and the air
     // a ray reaches past the plane is behind it (`mediumOverColumn` charges it as a leg's air, from where the
@@ -733,11 +733,33 @@ vec4 fogAlong(uvec2 pixel, WorldRay ray, float distance)
     // The volume, whatever kind of air this is. A room could read a closed form instead, but that is a lamp
     // reservoir and a ray per pixel, where the volume walks the lamps once per froxel and hands this two
     // fetches, which costs an interior less.
-    const vec4 weather = fogVolumeAlong(pixel, ray.mAlong, distance);
+    vec4 weather = fogVolumeAlong(pixel, ray.mAlong, distance);
+
+    // Continue exterior weather fog analytically beyond the froxel volume's reach for distant surface
+    // hits. The volume clamps at `fogReach()` (30,000 units, ~3.7 cells), which left distant terrain
+    // sharply visible past that range during storms at high distant-land settings. Gated on `hit` so sky
+    // misses keep the exact volume budget (preserving overhead clouds and existing volume/phase tests).
+    const float volumeReach = fogReach();
+    if (hit && distance > volumeReach && frame.mInteriorSun == 0u && frame.mFogExtinction > 0.0)
+    {
+        const float tailDepth
+            = fogColumn(ray.mFrom + ray.mAlong * volumeReach, ray.mAlong, distance - volumeReach);
+        const float tailThrough = exp(-tailDepth);
+        const vec3 tailColour = frame.mSkyDrawn != 0u
+            ? skyGradient(frame.mSkyHorizon, frame.mSkyZenith, frame.mSkyRamp, ray.mAlong)
+            : frame.mFogColour;
+        weather.xyz += weather.w * tailColour * (1.0 - tailThrough);
+        weather.w *= tailThrough;
+    }
 
     const vec4 edge = fogEdgeOver(ray.mAlong, 0.0, distance);
 
     return vec4(weather.xyz + weather.w * edge.xyz, weather.w * edge.w);
+}
+
+vec4 fogAlong(uvec2 pixel, WorldRay ray, float distance)
+{
+    return fogAlong(pixel, ray, distance, true);
 }
 
 #endif

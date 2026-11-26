@@ -140,7 +140,7 @@ void main()
         const WorldRay ray = WorldRay(peel.mOrigin, peel.mDirection);
         const vec3 shafts = written.mMedia ? stageShaftsAt(storedAt(ivec2(pixel), width, swap)) : vec3(1.0);
         bool marches;
-        const MediumAhead ahead = mediumAheadOf(pixel, ray, air, air, shafts, marches);
+        const MediumAhead ahead = mediumAheadOf(pixel, ray, air, air, true, shafts, marches);
 
         if (peel.mLayer == 0u)
             nearest = nearestPaneOf(layer, peel.mArms);

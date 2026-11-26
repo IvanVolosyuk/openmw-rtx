@@ -4,6 +4,7 @@
 #include <cstddef>
 #include <cstdint>
 #include <limits>
+#include <optional>
 #include <vector>
 
 #include <gtest/gtest.h>
@@ -19,6 +20,7 @@
 #include <components/rtx/world/fogbuilder.hpp>
 #include <components/rtx/world/fognoise.hpp>
 #include <components/rtx/world/skylight.hpp>
+#include <components/rtx/world/weather.hpp>
 
 namespace Rtx
 {
@@ -659,6 +661,101 @@ namespace Rtx
             EXPECT_EQ(quasi.mUniform, open.mUniform) << "banked as any other weather is";
             EXPECT_EQ(quasi.mLift, open.mLift) << "and standing as high";
             EXPECT_EQ(quasi.mWind, open.mWind);
+        }
+
+        TEST(RtxFogTest, weatherFogProfilesKeepClearUnchangedAndTightenStorms)
+        {
+            const osg::Vec3f haze(0.4f, 0.5f, 0.6f);
+            constexpr float cell = 8192.0f;
+            constexpr float farReach = 30.0f * cell;
+
+            for (const Weather fair : { Weather::Clear, Weather::Cloudy, Weather::Overcast })
+            {
+                const WeatherFogProfile profile = weatherFogProfile(fair);
+                EXPECT_TRUE(std::isinf(profile.mMaxReach));
+                EXPECT_EQ(profile.mMinLift, 0.0f);
+                EXPECT_EQ(profile.mUniform, Shaders::FOG_EXTERIOR_EVEN);
+
+                const Fog plain = exteriorFog(haze, 0.69f, 0.2f, farReach);
+                const Fog shaped = exteriorFog(haze, 0.69f, 0.2f, farReach, profile);
+                EXPECT_EQ(shaped.mExtinction, plain.mExtinction);
+                EXPECT_EQ(shaped.mUniform, plain.mUniform);
+                EXPECT_EQ(shaped.mLift, plain.mLift);
+                EXPECT_EQ(shaped.mEdge, plain.mEdge);
+            }
+
+            // Valley radiation fog caps horizontal extinction reach while still allowing high peaks to
+            // clear above the bank.
+            const WeatherFogProfile foggy = weatherFogProfile(Weather::Foggy);
+            EXPECT_FLOAT_EQ(foggy.mMaxReach, 3.0f * cell);
+            EXPECT_EQ(foggy.mMinLift, 0.0f);
+            EXPECT_GT(foggy.mUniform, Shaders::FOG_EXTERIOR_EVEN);
+
+            // Storms stay dense at long distant-land settings, preserve `mEdge` at world reach, and stand
+            // tall enough to shroud hills and levitation — including Snow where wind is zero.
+            const WeatherFogProfile snowProfile = weatherFogProfile(Weather::Snow);
+            const Fog snowBase = exteriorFog(haze, 1.0f, 0.0f, farReach);
+            const Fog snow = exteriorFog(haze, 1.0f, 0.0f, farReach, snowProfile);
+            EXPECT_FLOAT_EQ(snow.mExtinction, fogExtinction(1.0f, 2.5f * cell));
+            EXPECT_GT(snow.mExtinction, snowBase.mExtinction);
+            EXPECT_FLOAT_EQ(snow.mLift, 9.0f);
+            EXPECT_GT(snow.mLift, fogLift(1.0f, 0.0f));
+            EXPECT_EQ(snow.mUniform, snowProfile.mUniform);
+            EXPECT_EQ(snow.mEdge, farReach);
+
+            for (const Weather storm : { Weather::Rain, Weather::Thunderstorm, Weather::Snow, Weather::Ashstorm,
+                     Weather::Blight, Weather::Blizzard })
+            {
+                const WeatherFogProfile profile = weatherFogProfile(storm);
+                EXPECT_LT(profile.mMaxReach, farReach);
+                EXPECT_GE(profile.mMinLift, 8.0f);
+                EXPECT_GT(profile.mUniform, Shaders::FOG_EXTERIOR_EVEN);
+
+                const Fog open = exteriorFog(haze, 1.1f, 0.8f, farReach, profile);
+                const Fog quasi = quasiExteriorFog(haze, 1.1f, 0.8f, farReach, profile);
+                EXPECT_EQ(open.mEdge, farReach);
+                EXPECT_EQ(quasi.mEdge, 0.0f);
+                EXPECT_EQ(quasi.mExtinction, open.mExtinction);
+                EXPECT_EQ(quasi.mLift, open.mLift);
+            }
+        }
+
+        TEST(RtxFogTest, weatherFogProfileTransitionsBlendExtinctionLinearly)
+        {
+            const osg::Vec3f haze(0.4f, 0.5f, 0.6f);
+            constexpr float cell = 8192.0f;
+            constexpr float farReach = 30.0f * cell;
+            constexpr float depth = 1.0f;
+
+            const WeatherFogProfile clear = weatherFogProfile(Weather::Clear);
+            const WeatherFogProfile ash = weatherFogProfile(Weather::Ashstorm);
+
+            const WeatherFogProfile atStart = blendWeatherFogProfile(Weather::Clear, Weather::Ashstorm, 0.0f, farReach);
+            EXPECT_TRUE(std::isinf(atStart.mMaxReach));
+            EXPECT_EQ(atStart.mMinLift, clear.mMinLift);
+            EXPECT_EQ(atStart.mUniform, clear.mUniform);
+
+            const WeatherFogProfile atEnd = blendWeatherFogProfile(Weather::Clear, Weather::Ashstorm, 1.0f, farReach);
+            EXPECT_EQ(atEnd.mMaxReach, ash.mMaxReach);
+            EXPECT_EQ(atEnd.mMinLift, ash.mMinLift);
+            EXPECT_EQ(atEnd.mUniform, ash.mUniform);
+
+            const WeatherFogProfile none = blendWeatherFogProfile(Weather::Clear, std::nullopt, 0.5f, farReach);
+            EXPECT_EQ(none.mMinLift, clear.mMinLift);
+            EXPECT_EQ(none.mUniform, clear.mUniform);
+
+            const WeatherFogProfile nanMix = blendWeatherFogProfile(
+                Weather::Clear, Weather::Ashstorm, std::numeric_limits<float>::quiet_NaN(), farReach);
+            EXPECT_EQ(nanMix.mMinLift, clear.mMinLift);
+            EXPECT_EQ(nanMix.mUniform, clear.mUniform);
+
+            const WeatherFogProfile mid = blendWeatherFogProfile(Weather::Clear, Weather::Ashstorm, 0.5f, farReach);
+            const float clearExt = exteriorFog(haze, depth, 0.8f, farReach, clear).mExtinction;
+            const float ashExt = exteriorFog(haze, depth, 0.8f, farReach, ash).mExtinction;
+            const float midExt = exteriorFog(haze, depth, 0.8f, farReach, mid).mExtinction;
+            EXPECT_NEAR(midExt, 0.5f * (clearExt + ashExt), 1e-7f);
+            EXPECT_NEAR(mid.mMinLift, 0.5f * (clear.mMinLift + ash.mMinLift), 1e-6f);
+            EXPECT_NEAR(mid.mUniform, 0.5f * (clear.mUniform + ash.mUniform), 1e-6f);
         }
     }
 }

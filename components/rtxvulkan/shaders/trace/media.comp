@@ -105,7 +105,7 @@ void main()
     {
         ++turns;
         through = under ? mediumOverColumn(eye, underPath, reach, air, columnOf(column)).mThrough
-                        : vec3(fogAlong(pixel, eye, air).w);
+                        : vec3(fogAlong(pixel, eye, air, hit).w);
         shafts = under ? shaftsOf(column) : vec3(0.0);
         done = !metWater;
         if (metWater)

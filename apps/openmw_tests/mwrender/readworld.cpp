@@ -30,6 +30,7 @@
 #include <components/rtx/world/frameworld.hpp>
 #include <components/rtx/world/moon.hpp>
 #include <components/rtx/world/skycontent.hpp>
+#include <components/rtx/world/weather.hpp>
 #include <components/settings/values.hpp>
 #include <components/sky/skyclock.hpp>
 #include <components/sky/sunglarefader.hpp>
@@ -429,6 +430,47 @@ namespace MWRender
                     << "nothing falling, setting " << shelters;
             }
             Settings::shaders().mWeatherParticleOcclusion.set(setting);
+        }
+
+        TEST(RtxReadWorldTest, stormWeatherAppliesFogProfileAndBlendsTransitions)
+        {
+            const SkyReader reader;
+            const Falling falling;
+            constexpr float farReach = 30.0f * static_cast<float>(Constants::CellSizeInUnits);
+
+            Standing clear = standingIn(Location::Exterior);
+            clear.mWorld.mWeatherId = Rtx::scriptIdOf(Rtx::Weather::Clear);
+            clear.mWorld.mNextWeatherId = std::nullopt;
+            clear.mWorld.mWeatherTransition = 0.0f;
+            const Rtx::WorldReading clearRead = reader.read(clear.mSky, clear.mWorld, falling.mPrecipitation, 0.0f, farReach);
+
+            Standing ash = standingIn(Location::Exterior);
+            ash.mWorld.mWeatherId = Rtx::scriptIdOf(Rtx::Weather::Ashstorm);
+            ash.mWorld.mNextWeatherId = std::nullopt;
+            ash.mWorld.mWeatherTransition = 0.0f;
+            ash.mSky.mWeather.mFogDepth = 1.1f;
+            ash.mSky.mWeather.mBaseWindSpeed = 0.8f;
+            const Rtx::WorldReading ashRead = reader.read(ash.mSky, ash.mWorld, falling.mPrecipitation, 0.0f, farReach);
+
+            const Rtx::WeatherFogProfile ashProfile = Rtx::weatherFogProfile(Rtx::Weather::Ashstorm);
+            EXPECT_GT(ashRead.mDaylight.mFog.mExtinction, clearRead.mDaylight.mFog.mExtinction);
+            EXPECT_FLOAT_EQ(ashRead.mDaylight.mFog.mExtinction, Rtx::fogExtinction(1.1f, ashProfile.mMaxReach));
+            EXPECT_FLOAT_EQ(ashRead.mDaylight.mFog.mLift, 10.0f);
+            EXPECT_FLOAT_EQ(ashRead.mDaylight.mFog.mUniform, 0.80f);
+            EXPECT_FLOAT_EQ(ashRead.mDaylight.mFog.mEdge, farReach);
+
+            Standing blended = ash;
+            blended.mWorld.mWeatherId = Rtx::scriptIdOf(Rtx::Weather::Clear);
+            blended.mWorld.mNextWeatherId = Rtx::scriptIdOf(Rtx::Weather::Ashstorm);
+            blended.mWorld.mWeatherTransition = 0.5f;
+            const Rtx::WorldReading midRead
+                = reader.read(blended.mSky, blended.mWorld, falling.mPrecipitation, 0.0f, farReach);
+            EXPECT_GT(midRead.mDaylight.mFog.mExtinction, clearRead.mDaylight.mFog.mExtinction);
+            EXPECT_LT(midRead.mDaylight.mFog.mExtinction, ashRead.mDaylight.mFog.mExtinction);
+            EXPECT_GT(midRead.mDaylight.mFog.mLift, clearRead.mDaylight.mFog.mLift);
+            EXPECT_LT(midRead.mDaylight.mFog.mLift, ashRead.mDaylight.mFog.mLift);
+            EXPECT_GT(midRead.mDaylight.mFog.mUniform, clearRead.mDaylight.mFog.mUniform);
+            EXPECT_LT(midRead.mDaylight.mFog.mUniform, ashRead.mDaylight.mFog.mUniform);
         }
     }
 }

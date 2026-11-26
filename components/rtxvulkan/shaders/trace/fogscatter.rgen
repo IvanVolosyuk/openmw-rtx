@@ -360,8 +360,12 @@ void main()
     }
     else
     {
-        transport = sunUp() ? sunInAir(position, visible) : 0.0;
-        sunSource = density * transport;
+        // Puffs and precipitation (`puffLight` via `seeing.mTransport`) take world shadow `visible`
+        // without single-scatter fog self-attenuation, matching surfaces (`shading.glsl`) and keeping
+        // snow/rain bright inside tall storm columns. Volumetric fog shafts (`sunSource`) keep
+        // `sunInAir`'s beam extinction unchanged.
+        transport = sunUp() ? visible : 0.0;
+        sunSource = density * (sunUp() ? sunInAir(position, visible) : 0.0);
     }
 
     // **The lamps' seeing and the ambient's ride beside the sun's transport**, because the three are

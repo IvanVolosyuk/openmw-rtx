@@ -2,10 +2,13 @@
 
 #include <algorithm>
 #include <cmath>
+#include <limits>
 #include <numbers>
+#include <optional>
 
 #include <osg/Vec3f>
 
+#include <components/misc/constants.hpp>
 #include <components/rtx/shaders/colour.h>
 #include <components/rtx/shaders/look.h>
 
@@ -102,16 +105,94 @@ namespace Rtx
         return hue * ((skyMean * Shaders::LUMINANCE_WEIGHTS) / brightest);
     }
 
+    WeatherFogProfile weatherFogProfile(const Weather weather)
+    {
+        constexpr float cell = static_cast<float>(Constants::CellSizeInUnits);
+        switch (weather)
+        {
+            case Weather::Clear:
+            case Weather::Cloudy:
+            case Weather::Overcast:
+                return WeatherFogProfile{};
+            case Weather::Foggy:
+                return WeatherFogProfile{ .mMaxReach = 3.0f * cell, .mMinLift = 0.0f, .mUniform = 0.55f };
+            case Weather::Rain:
+                return WeatherFogProfile{ .mMaxReach = 4.0f * cell, .mMinLift = 8.0f, .mUniform = 0.65f };
+            case Weather::Thunderstorm:
+                return WeatherFogProfile{ .mMaxReach = 2.5f * cell, .mMinLift = 9.0f, .mUniform = 0.75f };
+            case Weather::Snow:
+                return WeatherFogProfile{ .mMaxReach = 2.5f * cell, .mMinLift = 9.0f, .mUniform = 0.70f };
+            case Weather::Ashstorm:
+                return WeatherFogProfile{ .mMaxReach = 1.75f * cell, .mMinLift = 10.0f, .mUniform = 0.80f };
+            case Weather::Blight:
+                return WeatherFogProfile{ .mMaxReach = 1.5f * cell, .mMinLift = 11.0f, .mUniform = 0.85f };
+            case Weather::Blizzard:
+                return WeatherFogProfile{ .mMaxReach = 2.0f * cell, .mMinLift = 12.0f, .mUniform = 0.90f };
+            case Weather::Count:
+                break;
+        }
+        return WeatherFogProfile{};
+    }
+
+    WeatherFogProfile blendWeatherFogProfile(
+        const Weather current, const std::optional<Weather> next, const float mixNext, const float worldReach)
+    {
+        if (!next.has_value() || !(mixNext > 0.0f))
+            return weatherFogProfile(current);
+        if (mixNext >= 1.0f)
+            return weatherFogProfile(*next);
+
+        const WeatherFogProfile p0 = weatherFogProfile(current);
+        const WeatherFogProfile p1 = weatherFogProfile(*next);
+        const float t = mixNext;
+
+        float maxReach = std::numeric_limits<float>::infinity();
+        if (!(std::isinf(p0.mMaxReach) && std::isinf(p1.mMaxReach)))
+        {
+            if (worldReach > 0.0f && std::isfinite(worldReach))
+            {
+                const float r0 = std::min(worldReach, p0.mMaxReach);
+                const float r1 = std::min(worldReach, p1.mMaxReach);
+                const float inv = std::lerp(1.0f / r0, 1.0f / r1, t);
+                maxReach = inv > 0.0f ? (1.0f / inv) : worldReach;
+            }
+            else
+            {
+                const float inv0 = (p0.mMaxReach > 0.0f && std::isfinite(p0.mMaxReach)) ? (1.0f / p0.mMaxReach) : 0.0f;
+                const float inv1 = (p1.mMaxReach > 0.0f && std::isfinite(p1.mMaxReach)) ? (1.0f / p1.mMaxReach) : 0.0f;
+                const float inv = std::lerp(inv0, inv1, t);
+                maxReach = inv > 0.0f ? (1.0f / inv) : std::numeric_limits<float>::infinity();
+            }
+        }
+
+        return WeatherFogProfile{
+            .mMaxReach = maxReach,
+            .mMinLift = std::lerp(p0.mMinLift, p1.mMinLift, t),
+            .mUniform = std::lerp(p0.mUniform, p1.mUniform, t),
+        };
+    }
+
     Fog exteriorFog(const osg::Vec3f& colour, float depth, float wind, float reach)
     {
+        return exteriorFog(colour, depth, wind, reach, WeatherFogProfile{});
+    }
+
+    Fog exteriorFog(
+        const osg::Vec3f& colour, float depth, float wind, float reach, const WeatherFogProfile& profile)
+    {
+        const float effectiveReach = (profile.mMaxReach > 0.0f && reach > 0.0f) ? std::min(reach, profile.mMaxReach) : reach;
+        const float uniform
+            = std::isfinite(profile.mUniform) ? std::clamp(profile.mUniform, 0.0f, 1.0f) : Shaders::FOG_EXTERIOR_EVEN;
+        const float minLift = (profile.mMinLift > 0.0f && std::isfinite(profile.mMinLift)) ? profile.mMinLift : 0.0f;
+
         return Fog{
             .mColour = colour,
-            .mExtinction = fogExtinction(depth, reach),
-            .mUniform = Shaders::FOG_EXTERIOR_EVEN,
+            .mExtinction = fogExtinction(depth, effectiveReach),
+            .mUniform = uniform,
 
             // The same record read a second time: `fogExtinction` reads it as the view-range ramp
             // and takes a half-life, this reads it as a *depth* and takes a layer height.
-            .mLift = fogLift(depth, wind),
+            .mLift = std::max(fogLift(depth, wind), minLift),
             .mWind = wind,
             .mEdge = reach,
         };
@@ -119,7 +200,13 @@ namespace Rtx
 
     Fog quasiExteriorFog(const osg::Vec3f& colour, float depth, float wind, float reach)
     {
-        Fog air = exteriorFog(colour, depth, wind, reach);
+        return quasiExteriorFog(colour, depth, wind, reach, WeatherFogProfile{});
+    }
+
+    Fog quasiExteriorFog(
+        const osg::Vec3f& colour, float depth, float wind, float reach, const WeatherFogProfile& profile)
+    {
+        Fog air = exteriorFog(colour, depth, wind, reach, profile);
         air.mEdge = 0.0f;
 
         return air;

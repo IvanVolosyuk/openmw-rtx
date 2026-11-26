@@ -271,9 +271,19 @@ namespace MWRender
         // The recorded depth and not the ramp `FogManager` made of it, which exists to hide a far clip plane.
         // A quasi-exterior stands in the weather's air, as handed to `roomFog` it closed over the sky. The
         // base wind and not the gust: the fog's depth and drift are the weather's settled character.
-        const auto openAir = world.mLocation == Location::Exterior ? &Rtx::exteriorFog : &Rtx::quasiExteriorFog;
-        const Rtx::Fog air
-            = room.has_value() ? room->mFog : openAir(haze, weather.mFogDepth, weather.mBaseWindSpeed, reach);
+        const Rtx::Weather currentWeather
+            = Rtx::weatherOfScriptId(world.mWeatherId).value_or(Rtx::Weather::Clear);
+        const std::optional<Rtx::Weather> nextWeather
+            = world.mNextWeatherId.has_value() ? Rtx::weatherOfScriptId(*world.mNextWeatherId) : std::nullopt;
+        const float weatherMix
+            = std::isfinite(world.mWeatherTransition) ? std::clamp(1.0f - world.mWeatherTransition, 0.0f, 1.0f) : 0.0f;
+        const Rtx::WeatherFogProfile fogProfile
+            = Rtx::blendWeatherFogProfile(currentWeather, nextWeather, weatherMix, reach);
+        const Rtx::Fog air = room.has_value()
+            ? room->mFog
+            : (world.mLocation == Location::Exterior
+                      ? Rtx::exteriorFog(haze, weather.mFogDepth, weather.mBaseWindSpeed, reach, fogProfile)
+                      : Rtx::quasiExteriorFog(haze, weather.mFogDepth, weather.mBaseWindSpeed, reach, fogProfile));
 
         // Before the frame rather than into it, because the deck is lit by them (`Rtx::deckLight`).
         std::array<Rtx::MoonPlacement, 2> moons{};

@@ -1,6 +1,13 @@
 #pragma once
 
+#include <limits>
+#include <optional>
+
 #include <osg/Vec3f>
+
+#include <components/rtx/shaders/look.h>
+
+#include "weather.hpp"
 
 namespace Rtx
 {
@@ -81,14 +88,50 @@ namespace Rtx
     /// would lift the room's black level by a fifth.
     constexpr float sInteriorFogReach = 25.0f * 7168.0f;
 
+    /// How a weather shapes its exterior air beyond `Land_Fog_Depth` and wind:
+    /// - `mMaxReach` caps the distance `fogExtinction` is measured across so storms stay dense even
+    ///   when distant land extends many cells (while `Fog::mEdge` still closes at the full world
+    ///   reach).
+    /// - `mMinLift` sets a minimum vertical scale-height multiplier (`FOG_HEIGHT * mLift`) so storms
+    ///   remain enveloping at elevation and when levitating (`0.0f` leaves `fogLift` unchanged).
+    /// - `mUniform` sets the uniform share of the medium between banks (`0..1`).
+    struct WeatherFogProfile
+    {
+        float mMaxReach = std::numeric_limits<float>::infinity();
+        float mMinLift = 0.0f;
+        float mUniform = Shaders::FOG_EXTERIOR_EVEN;
+    };
+
+    /// Per-weather fog profile. Fair weathers (`Clear`, `Cloudy`, `Overcast`) keep the full world
+    /// reach and clear-sky banking; fog and storms cap optical reach, lift their vertical column,
+    /// and fill more evenly.
+    WeatherFogProfile weatherFogProfile(Weather weather);
+
+    /// Blends the exterior fog profile across a weather transition (`mixNext` in `[0, 1]`, where
+    /// `0` is fully `current` and `1` is fully `next`). Effective reach blends in inverse-distance
+    /// space against `worldReach` so extinction transitions linearly rather than snapping at the
+    /// end.
+    WeatherFogProfile blendWeatherFogProfile(
+        Weather current, std::optional<Weather> next, float mixNext, float worldReach);
+
     /// The open air, from the colour and the fog depth a weather is at. One place decides what
     /// `reach` (`CellGrid::reachOf`) means: the extinction is a half-life over it, the edge closes
     /// at it, and only a landscape is large enough to bank.
     Fog exteriorFog(const osg::Vec3f& colour, float depth, float wind, float reach);
 
+    /// The open air shaped by `profile`: `profile.mMaxReach` caps the extinction measurement span
+    /// while `mEdge` remains the full `reach`, `profile.mMinLift` floors `mLift`, and
+    /// `profile.mUniform` sets bank uniformity.
+    Fog exteriorFog(
+        const osg::Vec3f& colour, float depth, float wind, float reach, const WeatherFogProfile& profile);
+
     /// The same air over a cell that is built whole — Vivec's cantons, Mournhold — where the edge
     /// would close over nothing and so is not there.
     Fog quasiExteriorFog(const osg::Vec3f& colour, float depth, float wind, float reach);
+
+    /// `quasiExteriorFog` shaped by `profile`.
+    Fog quasiExteriorFog(
+        const osg::Vec3f& colour, float depth, float wind, float reach, const WeatherFogProfile& profile);
 
     /// A room's air: measured over `sInteriorFogReach` and closing over nothing.
     Fog roomFog(const osg::Vec3f& colour, float depth);

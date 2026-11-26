@@ -48,12 +48,12 @@ MediumAhead mediumOverColumn(WorldRay ray, float under, float water, float air, 
 /// rose through it. The column's beam is scaled by `shafts`, what the media stage's march found them make of the
 /// eye's column (`storeStageShafts`), one where that stage did not run; and `marches` says whether the column is
 /// one that stage marches. One composition for the whole path and for every layer peeled off it.
-MediumAhead mediumAheadOf(uvec2 pixel, WorldRay ray, float air, float water, vec3 shafts, out bool marches)
+MediumAhead mediumAheadOf(uvec2 pixel, WorldRay ray, float air, float water, bool hit, vec3 shafts, out bool marches)
 {
     marches = false;
     if (!(waterOver(ray.mFrom) > 0.0))
     {
-        const vec4 fog = fogAlong(pixel, ray, air);
+        const vec4 fog = fogAlong(pixel, ray, air, hit);
         return MediumAhead(fog.xyz, vec3(fog.w));
     }
 
