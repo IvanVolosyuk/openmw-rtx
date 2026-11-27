@@ -31,6 +31,7 @@
 #include <SDL3/SDL_gamepad.h>
 #include <unicode/fmtable.h>
 #include <unicode/locid.h>
+#include <unicode/unistr.h>
 
 #include <apps/openmw/mwbase/environment.hpp>
 #include <apps/openmw/mwbase/inputmanager.hpp>
@@ -130,6 +131,49 @@ namespace
         }
     }
 
+    constexpr std::size_t sWeatherFogDistanceSliderRange
+        = static_cast<std::size_t>((Settings::RTXCategory::sMaxWeatherFogDistanceCells
+                                       - Settings::RTXCategory::sMinWeatherFogDistanceCells)
+              / Settings::RTXCategory::sWeatherFogDistanceStepCells)
+        + 2;
+    static_assert(sWeatherFogDistanceSliderRange == 121,
+        "keep WeatherFogDistance slider Range in openmw_settings_window.layout synced");
+
+    std::size_t weatherFogDistanceToPos(float cells, std::size_t maxPos)
+    {
+        if (!(cells > 0.0f) || maxPos == 0)
+            return maxPos;
+
+        const float minCells = Settings::RTXCategory::sMinWeatherFogDistanceCells;
+        const float maxCells = Settings::RTXCategory::sMaxWeatherFogDistanceCells;
+        const float stepCells = Settings::RTXCategory::sWeatherFogDistanceStepCells;
+        const float clamped = std::clamp(cells, minCells, maxCells);
+        const auto step = static_cast<long long>(std::llround((clamped - minCells) / stepCells));
+        return static_cast<std::size_t>(std::clamp<long long>(step, 0, static_cast<long long>(maxPos - 1)));
+    }
+
+    float weatherFogDistanceFromPos(std::size_t pos, std::size_t maxPos)
+    {
+        if (pos >= maxPos)
+            return 0.0f;
+
+        const float minCells = Settings::RTXCategory::sMinWeatherFogDistanceCells;
+        const float maxCells = Settings::RTXCategory::sMaxWeatherFogDistanceCells;
+        const float stepCells = Settings::RTXCategory::sWeatherFogDistanceStepCells;
+        return std::min(minCells + static_cast<float>(pos) * stepCells, maxCells);
+    }
+
+    void appendWeatherFogDistanceArgs(
+        float cells, std::vector<icu::UnicodeString>& argNames, std::vector<icu::Formattable>& args)
+    {
+        auto l10n = MWBase::Environment::get().getL10nManager()->getContext("OMWEngine");
+        const std::string distanceText = !(cells > 0.0f)
+            ? l10n->formatMessage("WeatherFogDistanceAuto", {}, {})
+            : l10n->formatMessage("WeatherFogDistanceCells", { "value" }, { cells });
+        argNames.emplace_back("distance");
+        args.emplace_back(icu::UnicodeString::fromUTF8(distanceText));
+    }
+
     constexpr std::array<Rtx::MenuLabel<Rtx::Upscale>, Rtx::sUpscaleMenu.size()> sUpscaleLabels{ {
         { Rtx::Upscale::UltraPerformance, "#{OMWEngine:RayTracingUpscaleUltraPerformance}" },
         { Rtx::Upscale::Performance, "#{OMWEngine:RayTracingUpscalePerformance}" },
@@ -215,6 +259,13 @@ namespace MWGui
                     args.emplace_back(value);
                     scroll->setScrollPosition(static_cast<std::size_t>(std::clamp(value, min, max) - min));
                 }
+                else if (valueType == "WeatherFogDistance")
+                {
+                    const float value = Settings::get<float>(getSettingCategory(current), getSettingName(current));
+                    const std::size_t maxPos = scroll->getScrollRange() > 0 ? scroll->getScrollRange() - 1 : 0;
+                    scroll->setScrollPosition(weatherFogDistanceToPos(value, maxPos));
+                    appendWeatherFogDistanceArgs(value, argNames, args);
+                }
                 else
                 {
                     const std::int32_t value
@@ -290,7 +341,7 @@ namespace MWGui
 
         MyGUI::ScrollView* rayTracingScroll = nullptr;
         getWidget(rayTracingScroll, "RayTracingScroll");
-        rayTracingScroll->setCanvasSize(420, 900);
+        rayTracingScroll->setCanvasSize(420, 1428);
         rayTracingScroll->setVisibleHScroll(false);
 
         configureWidgets(mMainWidget, true);
@@ -699,6 +750,14 @@ namespace MWGui
                 Settings::get<std::int32_t>(getSettingCategory(scroller), getSettingName(scroller)).set(value);
             argNames.emplace_back("value");
             args.emplace_back(value);
+        }
+        else if (valueType == "WeatherFogDistance")
+        {
+            const std::size_t maxPos = scroller->getScrollRange() > 0 ? scroller->getScrollRange() - 1 : 0;
+            const float value = weatherFogDistanceFromPos(pos, maxPos);
+            if (write)
+                Settings::get<float>(getSettingCategory(scroller), getSettingName(scroller)).set(value);
+            appendWeatherFogDistanceArgs(value, argNames, args);
         }
         else
         {

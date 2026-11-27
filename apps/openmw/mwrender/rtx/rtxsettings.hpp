@@ -5,6 +5,7 @@
 #include <components/rtx/frame/reconstruction.hpp>
 #include <components/rtx/frame/upscale.hpp>
 #include <components/rtx/mirror/lightbuilder.hpp>
+#include <components/rtx/world/fogbuilder.hpp>
 
 #include "mirrorknobs.hpp"
 
@@ -25,6 +26,7 @@ namespace MWRender
         float mInteriorSunlightStrength = 1.0f;
         float mInteriorWindowSkylight = 1.0f;
         float mInteriorWindowGodrays = 1.0f;
+        Rtx::WeatherFogDistances mWeatherFogDistances{};
         float mDistantLandCells = 0.0f;
         float mViewingDistance = 0.0f;
         bool mObjectPaging = true;
@@ -64,6 +66,8 @@ namespace MWRender
         float mInteriorSunlightStrength = 1.0f;
         float mInteriorWindowSkylight = 1.0f;
         float mInteriorWindowGodrays = 1.0f;
+
+        Rtx::WeatherFogDistances mWeatherFogDistances{};
 
         MirrorKnobs mMirror;
 

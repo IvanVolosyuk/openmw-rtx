@@ -668,6 +668,171 @@
                                 <UserString key="ToolTipLayout" value="TextToolTip"/>
                                 <UserString key="Caption_Text" value="#{OMWEngine:RayTracingInteriorWindowGodraysHint}"/>
                             </Widget>
+
+                            <Widget type="TextBox" skin="SandText" position="0 900 420 34" name="WeatherFogDistanceSectionHint">
+                                <Property key="Caption" value="#{OMWEngine:WeatherFogDistanceSectionHint}"/>
+                                <Property key="WordWrap" value="true"/>
+                            </Widget>
+
+                            <Widget type="TextBox" skin="NormalText" position="0 942 420 18" name="WeatherFogClearText"/>
+                            <Widget type="ScrollBar" skin="MW_HScroll" position="0 963 420 18" name="WeatherFogClearSlider">
+                                <Property key="Range" value="121"/>
+                                <Property key="Page" value="1"/>
+                                <Property key="WheelPage" value="4"/>
+                                <UserString key="SettingType" value="Slider"/>
+                                <UserString key="SettingCategory" value="RTX"/>
+                                <UserString key="SettingName" value="weather fog distance clear"/>
+                                <UserString key="SettingValueType" value="WeatherFogDistance"/>
+                                <UserString key="SettingLabelWidget" value="WeatherFogClearText"/>
+                                <UserString key="SettingLabelCaption" value="WeatherFogClearValue"/>
+                                <UserString key="ToolTipType" value="Layout"/>
+                                <UserString key="ToolTipLayout" value="TextToolTip"/>
+                                <UserString key="Caption_Text" value="#{OMWEngine:WeatherFogDistanceHint}"/>
+                            </Widget>
+
+                            <Widget type="TextBox" skin="NormalText" position="0 990 420 18" name="WeatherFogCloudyText"/>
+                            <Widget type="ScrollBar" skin="MW_HScroll" position="0 1011 420 18" name="WeatherFogCloudySlider">
+                                <Property key="Range" value="121"/>
+                                <Property key="Page" value="1"/>
+                                <Property key="WheelPage" value="4"/>
+                                <UserString key="SettingType" value="Slider"/>
+                                <UserString key="SettingCategory" value="RTX"/>
+                                <UserString key="SettingName" value="weather fog distance cloudy"/>
+                                <UserString key="SettingValueType" value="WeatherFogDistance"/>
+                                <UserString key="SettingLabelWidget" value="WeatherFogCloudyText"/>
+                                <UserString key="SettingLabelCaption" value="WeatherFogCloudyValue"/>
+                                <UserString key="ToolTipType" value="Layout"/>
+                                <UserString key="ToolTipLayout" value="TextToolTip"/>
+                                <UserString key="Caption_Text" value="#{OMWEngine:WeatherFogDistanceHint}"/>
+                            </Widget>
+
+                            <Widget type="TextBox" skin="NormalText" position="0 1038 420 18" name="WeatherFogOvercastText"/>
+                            <Widget type="ScrollBar" skin="MW_HScroll" position="0 1059 420 18" name="WeatherFogOvercastSlider">
+                                <Property key="Range" value="121"/>
+                                <Property key="Page" value="1"/>
+                                <Property key="WheelPage" value="4"/>
+                                <UserString key="SettingType" value="Slider"/>
+                                <UserString key="SettingCategory" value="RTX"/>
+                                <UserString key="SettingName" value="weather fog distance overcast"/>
+                                <UserString key="SettingValueType" value="WeatherFogDistance"/>
+                                <UserString key="SettingLabelWidget" value="WeatherFogOvercastText"/>
+                                <UserString key="SettingLabelCaption" value="WeatherFogOvercastValue"/>
+                                <UserString key="ToolTipType" value="Layout"/>
+                                <UserString key="ToolTipLayout" value="TextToolTip"/>
+                                <UserString key="Caption_Text" value="#{OMWEngine:WeatherFogDistanceHint}"/>
+                            </Widget>
+
+                            <Widget type="TextBox" skin="NormalText" position="0 1086 420 18" name="WeatherFogFoggyText"/>
+                            <Widget type="ScrollBar" skin="MW_HScroll" position="0 1107 420 18" name="WeatherFogFoggySlider">
+                                <Property key="Range" value="121"/>
+                                <Property key="Page" value="1"/>
+                                <Property key="WheelPage" value="4"/>
+                                <UserString key="SettingType" value="Slider"/>
+                                <UserString key="SettingCategory" value="RTX"/>
+                                <UserString key="SettingName" value="weather fog distance foggy"/>
+                                <UserString key="SettingValueType" value="WeatherFogDistance"/>
+                                <UserString key="SettingLabelWidget" value="WeatherFogFoggyText"/>
+                                <UserString key="SettingLabelCaption" value="WeatherFogFoggyValue"/>
+                                <UserString key="ToolTipType" value="Layout"/>
+                                <UserString key="ToolTipLayout" value="TextToolTip"/>
+                                <UserString key="Caption_Text" value="#{OMWEngine:WeatherFogDistanceHint}"/>
+                            </Widget>
+
+                            <Widget type="TextBox" skin="NormalText" position="0 1134 420 18" name="WeatherFogRainText"/>
+                            <Widget type="ScrollBar" skin="MW_HScroll" position="0 1155 420 18" name="WeatherFogRainSlider">
+                                <Property key="Range" value="121"/>
+                                <Property key="Page" value="1"/>
+                                <Property key="WheelPage" value="4"/>
+                                <UserString key="SettingType" value="Slider"/>
+                                <UserString key="SettingCategory" value="RTX"/>
+                                <UserString key="SettingName" value="weather fog distance rain"/>
+                                <UserString key="SettingValueType" value="WeatherFogDistance"/>
+                                <UserString key="SettingLabelWidget" value="WeatherFogRainText"/>
+                                <UserString key="SettingLabelCaption" value="WeatherFogRainValue"/>
+                                <UserString key="ToolTipType" value="Layout"/>
+                                <UserString key="ToolTipLayout" value="TextToolTip"/>
+                                <UserString key="Caption_Text" value="#{OMWEngine:WeatherFogDistanceHint}"/>
+                            </Widget>
+
+                            <Widget type="TextBox" skin="NormalText" position="0 1182 420 18" name="WeatherFogThunderstormText"/>
+                            <Widget type="ScrollBar" skin="MW_HScroll" position="0 1203 420 18" name="WeatherFogThunderstormSlider">
+                                <Property key="Range" value="121"/>
+                                <Property key="Page" value="1"/>
+                                <Property key="WheelPage" value="4"/>
+                                <UserString key="SettingType" value="Slider"/>
+                                <UserString key="SettingCategory" value="RTX"/>
+                                <UserString key="SettingName" value="weather fog distance thunderstorm"/>
+                                <UserString key="SettingValueType" value="WeatherFogDistance"/>
+                                <UserString key="SettingLabelWidget" value="WeatherFogThunderstormText"/>
+                                <UserString key="SettingLabelCaption" value="WeatherFogThunderstormValue"/>
+                                <UserString key="ToolTipType" value="Layout"/>
+                                <UserString key="ToolTipLayout" value="TextToolTip"/>
+                                <UserString key="Caption_Text" value="#{OMWEngine:WeatherFogDistanceHint}"/>
+                            </Widget>
+
+                            <Widget type="TextBox" skin="NormalText" position="0 1230 420 18" name="WeatherFogSnowText"/>
+                            <Widget type="ScrollBar" skin="MW_HScroll" position="0 1251 420 18" name="WeatherFogSnowSlider">
+                                <Property key="Range" value="121"/>
+                                <Property key="Page" value="1"/>
+                                <Property key="WheelPage" value="4"/>
+                                <UserString key="SettingType" value="Slider"/>
+                                <UserString key="SettingCategory" value="RTX"/>
+                                <UserString key="SettingName" value="weather fog distance snow"/>
+                                <UserString key="SettingValueType" value="WeatherFogDistance"/>
+                                <UserString key="SettingLabelWidget" value="WeatherFogSnowText"/>
+                                <UserString key="SettingLabelCaption" value="WeatherFogSnowValue"/>
+                                <UserString key="ToolTipType" value="Layout"/>
+                                <UserString key="ToolTipLayout" value="TextToolTip"/>
+                                <UserString key="Caption_Text" value="#{OMWEngine:WeatherFogDistanceHint}"/>
+                            </Widget>
+
+                            <Widget type="TextBox" skin="NormalText" position="0 1278 420 18" name="WeatherFogAshstormText"/>
+                            <Widget type="ScrollBar" skin="MW_HScroll" position="0 1299 420 18" name="WeatherFogAshstormSlider">
+                                <Property key="Range" value="121"/>
+                                <Property key="Page" value="1"/>
+                                <Property key="WheelPage" value="4"/>
+                                <UserString key="SettingType" value="Slider"/>
+                                <UserString key="SettingCategory" value="RTX"/>
+                                <UserString key="SettingName" value="weather fog distance ashstorm"/>
+                                <UserString key="SettingValueType" value="WeatherFogDistance"/>
+                                <UserString key="SettingLabelWidget" value="WeatherFogAshstormText"/>
+                                <UserString key="SettingLabelCaption" value="WeatherFogAshstormValue"/>
+                                <UserString key="ToolTipType" value="Layout"/>
+                                <UserString key="ToolTipLayout" value="TextToolTip"/>
+                                <UserString key="Caption_Text" value="#{OMWEngine:WeatherFogDistanceHint}"/>
+                            </Widget>
+
+                            <Widget type="TextBox" skin="NormalText" position="0 1326 420 18" name="WeatherFogBlightText"/>
+                            <Widget type="ScrollBar" skin="MW_HScroll" position="0 1347 420 18" name="WeatherFogBlightSlider">
+                                <Property key="Range" value="121"/>
+                                <Property key="Page" value="1"/>
+                                <Property key="WheelPage" value="4"/>
+                                <UserString key="SettingType" value="Slider"/>
+                                <UserString key="SettingCategory" value="RTX"/>
+                                <UserString key="SettingName" value="weather fog distance blight"/>
+                                <UserString key="SettingValueType" value="WeatherFogDistance"/>
+                                <UserString key="SettingLabelWidget" value="WeatherFogBlightText"/>
+                                <UserString key="SettingLabelCaption" value="WeatherFogBlightValue"/>
+                                <UserString key="ToolTipType" value="Layout"/>
+                                <UserString key="ToolTipLayout" value="TextToolTip"/>
+                                <UserString key="Caption_Text" value="#{OMWEngine:WeatherFogDistanceHint}"/>
+                            </Widget>
+
+                            <Widget type="TextBox" skin="NormalText" position="0 1374 420 18" name="WeatherFogBlizzardText"/>
+                            <Widget type="ScrollBar" skin="MW_HScroll" position="0 1395 420 18" name="WeatherFogBlizzardSlider">
+                                <Property key="Range" value="121"/>
+                                <Property key="Page" value="1"/>
+                                <Property key="WheelPage" value="4"/>
+                                <UserString key="SettingType" value="Slider"/>
+                                <UserString key="SettingCategory" value="RTX"/>
+                                <UserString key="SettingName" value="weather fog distance blizzard"/>
+                                <UserString key="SettingValueType" value="WeatherFogDistance"/>
+                                <UserString key="SettingLabelWidget" value="WeatherFogBlizzardText"/>
+                                <UserString key="SettingLabelCaption" value="WeatherFogBlizzardValue"/>
+                                <UserString key="ToolTipType" value="Layout"/>
+                                <UserString key="ToolTipLayout" value="TextToolTip"/>
+                                <UserString key="Caption_Text" value="#{OMWEngine:WeatherFogDistanceHint}"/>
+                            </Widget>
                         </Widget>
                     </Widget>
                 </Widget>

@@ -757,5 +757,37 @@ namespace Rtx
             EXPECT_NEAR(mid.mMinLift, 0.5f * (clear.mMinLift + ash.mMinLift), 1e-6f);
             EXPECT_NEAR(mid.mUniform, 0.5f * (clear.mUniform + ash.mUniform), 1e-6f);
         }
+
+        TEST(RtxFogTest, weatherFogDistancesOverrideAndBlendSelectedWeathers)
+        {
+            constexpr float cell = 8192.0f;
+            constexpr float farReach = 30.0f * cell;
+            constexpr float depth = 1.0f;
+            const osg::Vec3f haze(0.4f, 0.5f, 0.6f);
+
+            WeatherFogDistances custom;
+            custom[Weather::Clear] = 5.0f;
+            custom[Weather::Rain] = 0.0f;
+
+            const WeatherFogProfile cappedClear = weatherFogProfile(Weather::Clear, custom);
+            EXPECT_FLOAT_EQ(cappedClear.mMaxReach, 5.0f * cell);
+            EXPECT_EQ(cappedClear.mMinLift, 0.0f);
+            EXPECT_EQ(cappedClear.mUniform, Shaders::FOG_EXTERIOR_EVEN);
+
+            const WeatherFogProfile autoRain = weatherFogProfile(Weather::Rain, custom);
+            EXPECT_TRUE(std::isinf(autoRain.mMaxReach));
+            EXPECT_FLOAT_EQ(autoRain.mMinLift, 8.0f);
+            EXPECT_FLOAT_EQ(autoRain.mUniform, 0.65f);
+
+            const WeatherFogProfile untouchedAsh = weatherFogProfile(Weather::Ashstorm, custom);
+            EXPECT_FLOAT_EQ(untouchedAsh.mMaxReach, 1.75f * cell);
+
+            const WeatherFogProfile blended
+                = blendWeatherFogProfile(Weather::Clear, Weather::Rain, 0.5f, farReach, custom);
+            const float clearExt = exteriorFog(haze, depth, 0.2f, farReach, cappedClear).mExtinction;
+            const float rainExt = exteriorFog(haze, depth, 0.3f, farReach, autoRain).mExtinction;
+            const float midExt = exteriorFog(haze, depth, 0.25f, farReach, blended).mExtinction;
+            EXPECT_NEAR(midExt, 0.5f * (clearExt + rainExt), 1e-7f);
+        }
     }
 }

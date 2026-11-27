@@ -88,6 +88,7 @@ namespace MWRender
             .mInteriorSunlightStrength = settings.mInteriorSunlightStrength,
             .mInteriorWindowSkylight = settings.mInteriorWindowSkylight,
             .mInteriorWindowGodrays = settings.mInteriorWindowGodrays,
+            .mWeatherFogDistances = settings.mWeatherFogDistances,
             .mBackend = backend,
             .mHeadless = backend == RtxBackend::Null,
             .mSettled = std::nullopt,

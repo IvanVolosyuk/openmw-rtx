@@ -43,6 +43,12 @@ namespace Settings
         /// back to `viewing distance`.
         static constexpr float sMaxDistantLandCells = 30.0f;
 
+        /// Slider bounds and step size for per-weather fog visibility distances (in cells; `0` follows
+        /// distant land).
+        static constexpr float sMinWeatherFogDistanceCells = 0.25f;
+        static constexpr float sMaxWeatherFogDistanceCells = sMaxDistantLandCells;
+        static constexpr float sWeatherFogDistanceStepCells = 0.25f;
+
         /// The fewest the two menus offer. A file may name fewer, and the launcher leaves such a
         /// value as it found it.
         static constexpr float sMinDistantLandCellsInMenu = 4.0f;
@@ -56,6 +62,27 @@ namespace Settings
         /// what `viewing distance` is about (`Rtx::CellGrid::reachOf`).
         SettingValue<float> mDistantLandCells{ mIndex, "RTX", "distant land cells",
             makeClampSanitizerFloat(0.0f, sMaxDistantLandCells) };
+
+        SettingValue<float> mWeatherFogClear{ mIndex, "RTX", "weather fog distance clear",
+            makeClampSanitizerFloat(0.0f, sMaxWeatherFogDistanceCells) };
+        SettingValue<float> mWeatherFogCloudy{ mIndex, "RTX", "weather fog distance cloudy",
+            makeClampSanitizerFloat(0.0f, sMaxWeatherFogDistanceCells) };
+        SettingValue<float> mWeatherFogFoggy{ mIndex, "RTX", "weather fog distance foggy",
+            makeClampSanitizerFloat(0.0f, sMaxWeatherFogDistanceCells) };
+        SettingValue<float> mWeatherFogOvercast{ mIndex, "RTX", "weather fog distance overcast",
+            makeClampSanitizerFloat(0.0f, sMaxWeatherFogDistanceCells) };
+        SettingValue<float> mWeatherFogRain{ mIndex, "RTX", "weather fog distance rain",
+            makeClampSanitizerFloat(0.0f, sMaxWeatherFogDistanceCells) };
+        SettingValue<float> mWeatherFogThunderstorm{ mIndex, "RTX", "weather fog distance thunderstorm",
+            makeClampSanitizerFloat(0.0f, sMaxWeatherFogDistanceCells) };
+        SettingValue<float> mWeatherFogAshstorm{ mIndex, "RTX", "weather fog distance ashstorm",
+            makeClampSanitizerFloat(0.0f, sMaxWeatherFogDistanceCells) };
+        SettingValue<float> mWeatherFogBlight{ mIndex, "RTX", "weather fog distance blight",
+            makeClampSanitizerFloat(0.0f, sMaxWeatherFogDistanceCells) };
+        SettingValue<float> mWeatherFogSnow{ mIndex, "RTX", "weather fog distance snow",
+            makeClampSanitizerFloat(0.0f, sMaxWeatherFogDistanceCells) };
+        SettingValue<float> mWeatherFogBlizzard{ mIndex, "RTX", "weather fog distance blizzard",
+            makeClampSanitizerFloat(0.0f, sMaxWeatherFogDistanceCells) };
 
         /// How hard the upscaler works, as `Rtx::sUpscaleModeNames` spells the modes and read by it at
         /// load. Changing it rebuilds every target; under no upscaler it waits for one. `Rtx::sUpscaleMenu`

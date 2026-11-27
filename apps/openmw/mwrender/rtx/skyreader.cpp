@@ -278,7 +278,7 @@ namespace MWRender
         const float weatherMix
             = std::isfinite(world.mWeatherTransition) ? std::clamp(1.0f - world.mWeatherTransition, 0.0f, 1.0f) : 0.0f;
         const Rtx::WeatherFogProfile fogProfile
-            = Rtx::blendWeatherFogProfile(currentWeather, nextWeather, weatherMix, reach);
+            = Rtx::blendWeatherFogProfile(currentWeather, nextWeather, weatherMix, reach, mWeatherFogDistances);
         const Rtx::Fog air = room.has_value()
             ? room->mFog
             : (world.mLocation == Location::Exterior

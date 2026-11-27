@@ -6,6 +6,7 @@
 
 #include <components/rtx/environment/skybuilder.hpp>
 #include <components/rtx/scene/rowhold.hpp>
+#include <components/rtx/world/fogbuilder.hpp>
 #include <components/rtx/world/frameworld.hpp>
 #include <components/rtx/world/moon.hpp>
 #include <components/rtx/world/skycontent.hpp>
@@ -110,6 +111,7 @@ namespace MWRender
         void setInteriorSunlightStrength(float strength) { mInteriorSunlightStrength = strength; }
         void setInteriorWindowSkylight(float scale) { mInteriorWindowSkylight = scale; }
         void setInteriorWindowGodrays(float strength) { mInteriorWindowGodrays = strength; }
+        void setWeatherFogDistances(const Rtx::WeatherFogDistances& distances) { mWeatherFogDistances = distances; }
 
         WindowPortalLighting readWindowPortalLighting(
             const WorldState& world, const SkyState& sky, bool hasWindowPortals) const;
@@ -151,5 +153,6 @@ namespace MWRender
         float mInteriorSunlightStrength = 1.0f;
         float mInteriorWindowSkylight = 1.0f;
         float mInteriorWindowGodrays = 1.0f;
+        Rtx::WeatherFogDistances mWeatherFogDistances{};
     };
 }

@@ -13,6 +13,7 @@
 #include <components/rtx/frame/upscale.hpp>
 #include <components/rtx/renderer/renderer.hpp>
 #include <components/rtx/renderer/shaderset.hpp>
+#include <components/rtx/world/fogbuilder.hpp>
 #include <components/rtx/world/frameworld.hpp>
 
 #include "mirrorknobs.hpp"
@@ -51,6 +52,9 @@ namespace MWRender
         float mInteriorSunlightStrength = 1.0f;
         float mInteriorWindowSkylight = 1.0f;
         float mInteriorWindowGodrays = 1.0f;
+
+        /// Per-weather fog visibility distance caps, in cells (`0` follows `mMirror.mReach`).
+        Rtx::WeatherFogDistances mWeatherFogDistances{};
 
         /// What draws the frames.
         RtxBackend mBackend = RtxBackend::Vulkan;

@@ -9,6 +9,8 @@
 #include <components/rtx/frame/upscale.hpp>
 #include <components/rtx/mirror/cells/cellgrid.hpp>
 #include <components/rtx/shaders/gbuffer.h>
+#include <components/rtx/world/fogbuilder.hpp>
+#include <components/rtx/world/weather.hpp>
 
 namespace MWRender
 {
@@ -18,11 +20,16 @@ namespace MWRender
         /// or swaps with another shows.
         RtxSettingValues valid()
         {
+            Rtx::WeatherFogDistances distances;
+            distances[Rtx::Weather::Clear] = 6.0f;
+            distances[Rtx::Weather::Rain] = 2.25f;
+
             return RtxSettingValues{
                 .mUpscale = Rtx::Upscale::Performance,
                 .mUpscaler = Rtx::UpscalerChoice::Dlss,
                 .mIndirectLighting = false,
                 .mBounceRays = 3,
+                .mWeatherFogDistances = distances,
                 .mDistantLandCells = 6.0f,
                 .mViewingDistance = 7168.0f,
                 .mObjectPaging = false,
@@ -46,6 +53,9 @@ namespace MWRender
             EXPECT_EQ(derived.mUpscaler, Rtx::UpscalerChoice::Dlss);
             EXPECT_FALSE(derived.mIndirectLighting);
             EXPECT_EQ(derived.mBounceRays, 3u);
+            EXPECT_FLOAT_EQ(derived.mWeatherFogDistances[Rtx::Weather::Clear], 6.0f);
+            EXPECT_FLOAT_EQ(derived.mWeatherFogDistances[Rtx::Weather::Rain], 2.25f);
+            EXPECT_FLOAT_EQ(derived.mWeatherFogDistances[Rtx::Weather::Ashstorm], 1.75f);
             // Cells and the viewing distance, which a worldspace's grid turns into units: six of
             // Morrowind's 8192 are 49152.
             EXPECT_EQ(derived.mMirror.mReach, (Rtx::LandReach{ .mCells = 6.0f, .mViewingDistance = 7168.0f }));
@@ -138,6 +148,21 @@ namespace MWRender
                 values.mBounceRays = rays;
                 EXPECT_EQ(RtxSettings::derive(values).mBounceRays, static_cast<std::uint32_t>(rays)) << rays;
             }
+        }
+
+        TEST(RtxSettingsTest, negativeOrNonFiniteWeatherFogDistancesAreRefused)
+        {
+            for (const float distance :
+                { -0.25f, std::numeric_limits<float>::quiet_NaN(), std::numeric_limits<float>::infinity() })
+            {
+                RtxSettingValues values = valid();
+                values.mWeatherFogDistances[Rtx::Weather::Rain] = distance;
+                EXPECT_THROW(RtxSettings::derive(values), Rtx::InputError) << distance;
+            }
+
+            RtxSettingValues autoMode = valid();
+            autoMode.mWeatherFogDistances[Rtx::Weather::Clear] = 0.0f;
+            EXPECT_EQ(RtxSettings::derive(autoMode).mWeatherFogDistances[Rtx::Weather::Clear], 0.0f);
         }
     }
 }

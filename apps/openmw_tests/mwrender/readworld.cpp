@@ -472,5 +472,50 @@ namespace MWRender
             EXPECT_GT(midRead.mDaylight.mFog.mUniform, clearRead.mDaylight.mFog.mUniform);
             EXPECT_LT(midRead.mDaylight.mFog.mUniform, ashRead.mDaylight.mFog.mUniform);
         }
+
+        TEST(RtxReadWorldTest, customWeatherFogDistancesAffectTargetedWeatherAndTransitions)
+        {
+            SkyReader reader;
+            const Falling falling;
+            constexpr float cell = static_cast<float>(Constants::CellSizeInUnits);
+            constexpr float farReach = 30.0f * cell;
+
+            Standing clear = standingIn(Location::Exterior);
+            clear.mWorld.mWeatherId = Rtx::scriptIdOf(Rtx::Weather::Clear);
+            clear.mWorld.mNextWeatherId = std::nullopt;
+            clear.mWorld.mWeatherTransition = 0.0f;
+
+            Standing rain = standingIn(Location::Exterior);
+            rain.mWorld.mWeatherId = Rtx::scriptIdOf(Rtx::Weather::Rain);
+            rain.mWorld.mNextWeatherId = std::nullopt;
+            rain.mWorld.mWeatherTransition = 0.0f;
+            rain.mSky.mWeather.mFogDepth = 0.8f;
+
+            const float defaultRainExt
+                = reader.read(rain.mSky, rain.mWorld, falling.mPrecipitation, 0.0f, farReach).mDaylight.mFog.mExtinction;
+            const float defaultClearExt
+                = reader.read(clear.mSky, clear.mWorld, falling.mPrecipitation, 0.0f, farReach).mDaylight.mFog.mExtinction;
+
+            Rtx::WeatherFogDistances custom;
+            custom[Rtx::Weather::Rain] = 1.5f;
+            reader.setWeatherFogDistances(custom);
+
+            const float customRainExt
+                = reader.read(rain.mSky, rain.mWorld, falling.mPrecipitation, 0.0f, farReach).mDaylight.mFog.mExtinction;
+            const float customClearExt
+                = reader.read(clear.mSky, clear.mWorld, falling.mPrecipitation, 0.0f, farReach).mDaylight.mFog.mExtinction;
+            EXPECT_FLOAT_EQ(customRainExt, Rtx::fogExtinction(0.8f, 1.5f * cell));
+            EXPECT_GT(customRainExt, defaultRainExt);
+            EXPECT_EQ(customClearExt, defaultClearExt);
+
+            Standing blended = rain;
+            blended.mWorld.mWeatherId = Rtx::scriptIdOf(Rtx::Weather::Clear);
+            blended.mWorld.mNextWeatherId = Rtx::scriptIdOf(Rtx::Weather::Rain);
+            blended.mWorld.mWeatherTransition = 0.5f;
+            const float midExt
+                = reader.read(blended.mSky, blended.mWorld, falling.mPrecipitation, 0.0f, farReach).mDaylight.mFog.mExtinction;
+            const float clearAtRainDepth = Rtx::fogExtinction(0.8f, farReach);
+            EXPECT_NEAR(midExt, 0.5f * (clearAtRainDepth + customRainExt), 1e-7f);
+        }
     }
 }

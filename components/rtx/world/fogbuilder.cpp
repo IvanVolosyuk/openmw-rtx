@@ -107,27 +107,39 @@ namespace Rtx
 
     WeatherFogProfile weatherFogProfile(const Weather weather)
     {
+        return weatherFogProfile(weather, WeatherFogDistances{});
+    }
+
+    WeatherFogProfile weatherFogProfile(const Weather weather, const WeatherFogDistances& distances)
+    {
         constexpr float cell = static_cast<float>(Constants::CellSizeInUnits);
+        float maxReach = std::numeric_limits<float>::infinity();
+        if (weather < Weather::Count)
+        {
+            const float cells = distances[weather];
+            if (cells > 0.0f && std::isfinite(cells))
+                maxReach = cells * cell;
+        }
         switch (weather)
         {
             case Weather::Clear:
             case Weather::Cloudy:
             case Weather::Overcast:
-                return WeatherFogProfile{};
+                return WeatherFogProfile{ .mMaxReach = maxReach };
             case Weather::Foggy:
-                return WeatherFogProfile{ .mMaxReach = 3.0f * cell, .mMinLift = 0.0f, .mUniform = 0.55f };
+                return WeatherFogProfile{ .mMaxReach = maxReach, .mMinLift = 0.0f, .mUniform = 0.55f };
             case Weather::Rain:
-                return WeatherFogProfile{ .mMaxReach = 4.0f * cell, .mMinLift = 8.0f, .mUniform = 0.65f };
+                return WeatherFogProfile{ .mMaxReach = maxReach, .mMinLift = 8.0f, .mUniform = 0.65f };
             case Weather::Thunderstorm:
-                return WeatherFogProfile{ .mMaxReach = 2.5f * cell, .mMinLift = 9.0f, .mUniform = 0.75f };
+                return WeatherFogProfile{ .mMaxReach = maxReach, .mMinLift = 9.0f, .mUniform = 0.75f };
             case Weather::Snow:
-                return WeatherFogProfile{ .mMaxReach = 2.5f * cell, .mMinLift = 9.0f, .mUniform = 0.70f };
+                return WeatherFogProfile{ .mMaxReach = maxReach, .mMinLift = 9.0f, .mUniform = 0.70f };
             case Weather::Ashstorm:
-                return WeatherFogProfile{ .mMaxReach = 1.75f * cell, .mMinLift = 10.0f, .mUniform = 0.80f };
+                return WeatherFogProfile{ .mMaxReach = maxReach, .mMinLift = 10.0f, .mUniform = 0.80f };
             case Weather::Blight:
-                return WeatherFogProfile{ .mMaxReach = 1.5f * cell, .mMinLift = 11.0f, .mUniform = 0.85f };
+                return WeatherFogProfile{ .mMaxReach = maxReach, .mMinLift = 11.0f, .mUniform = 0.85f };
             case Weather::Blizzard:
-                return WeatherFogProfile{ .mMaxReach = 2.0f * cell, .mMinLift = 12.0f, .mUniform = 0.90f };
+                return WeatherFogProfile{ .mMaxReach = maxReach, .mMinLift = 12.0f, .mUniform = 0.90f };
             case Weather::Count:
                 break;
         }
@@ -137,13 +149,19 @@ namespace Rtx
     WeatherFogProfile blendWeatherFogProfile(
         const Weather current, const std::optional<Weather> next, const float mixNext, const float worldReach)
     {
-        if (!next.has_value() || !(mixNext > 0.0f))
-            return weatherFogProfile(current);
-        if (mixNext >= 1.0f)
-            return weatherFogProfile(*next);
+        return blendWeatherFogProfile(current, next, mixNext, worldReach, WeatherFogDistances{});
+    }
 
-        const WeatherFogProfile p0 = weatherFogProfile(current);
-        const WeatherFogProfile p1 = weatherFogProfile(*next);
+    WeatherFogProfile blendWeatherFogProfile(const Weather current, const std::optional<Weather> next,
+        const float mixNext, const float worldReach, const WeatherFogDistances& distances)
+    {
+        if (!next.has_value() || !(mixNext > 0.0f))
+            return weatherFogProfile(current, distances);
+        if (mixNext >= 1.0f)
+            return weatherFogProfile(*next, distances);
+
+        const WeatherFogProfile p0 = weatherFogProfile(current, distances);
+        const WeatherFogProfile p1 = weatherFogProfile(*next, distances);
         const float t = mixNext;
 
         float maxReach = std::numeric_limits<float>::infinity();

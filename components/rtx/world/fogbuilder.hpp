@@ -1,5 +1,7 @@
 #pragma once
 
+#include <array>
+#include <cstddef>
 #include <limits>
 #include <optional>
 
@@ -102,10 +104,41 @@ namespace Rtx
         float mUniform = Shaders::FOG_EXTERIOR_EVEN;
     };
 
+    /// Per-weather fog visibility distance overrides, in cells. `0.0f` follows the full world
+    /// distant land reach (`+infinity` cap); positive values cap that weather's optical reach.
+    struct WeatherFogDistances
+    {
+        static constexpr std::array<float, sWeatherCount> defaultCells()
+        {
+            std::array<float, sWeatherCount> cells{};
+            cells[static_cast<std::size_t>(Weather::Clear)] = 0.0f;
+            cells[static_cast<std::size_t>(Weather::Cloudy)] = 0.0f;
+            cells[static_cast<std::size_t>(Weather::Foggy)] = 3.0f;
+            cells[static_cast<std::size_t>(Weather::Overcast)] = 0.0f;
+            cells[static_cast<std::size_t>(Weather::Rain)] = 4.0f;
+            cells[static_cast<std::size_t>(Weather::Thunderstorm)] = 2.5f;
+            cells[static_cast<std::size_t>(Weather::Ashstorm)] = 1.75f;
+            cells[static_cast<std::size_t>(Weather::Blight)] = 1.5f;
+            cells[static_cast<std::size_t>(Weather::Snow)] = 2.5f;
+            cells[static_cast<std::size_t>(Weather::Blizzard)] = 2.0f;
+            return cells;
+        }
+
+        std::array<float, sWeatherCount> mCells = defaultCells();
+
+        float& operator[](Weather weather) { return mCells[static_cast<std::size_t>(weather)]; }
+        float operator[](Weather weather) const { return mCells[static_cast<std::size_t>(weather)]; }
+
+        bool operator==(const WeatherFogDistances&) const = default;
+    };
+
     /// Per-weather fog profile. Fair weathers (`Clear`, `Cloudy`, `Overcast`) keep the full world
-    /// reach and clear-sky banking; fog and storms cap optical reach, lift their vertical column,
-    /// and fill more evenly.
+    /// reach and clear-sky banking by default; fog and storms cap optical reach, lift their vertical
+    /// column, and fill more evenly.
     WeatherFogProfile weatherFogProfile(Weather weather);
+
+    /// Per-weather fog profile using explicit per-weather distance overrides (`distances`).
+    WeatherFogProfile weatherFogProfile(Weather weather, const WeatherFogDistances& distances);
 
     /// Blends the exterior fog profile across a weather transition (`mixNext` in `[0, 1]`, where
     /// `0` is fully `current` and `1` is fully `next`). Effective reach blends in inverse-distance
@@ -113,6 +146,10 @@ namespace Rtx
     /// end.
     WeatherFogProfile blendWeatherFogProfile(
         Weather current, std::optional<Weather> next, float mixNext, float worldReach);
+
+    /// Blends the exterior fog profile across a weather transition using explicit `distances`.
+    WeatherFogProfile blendWeatherFogProfile(Weather current, std::optional<Weather> next, float mixNext,
+        float worldReach, const WeatherFogDistances& distances);
 
     /// The open air, from the colour and the fog depth a weather is at. One place decides what
     /// `reach` (`CellGrid::reachOf`) means: the extinction is a half-life over it, the edge closes

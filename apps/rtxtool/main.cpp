@@ -129,6 +129,7 @@ namespace RtxTool
 
             const MWRender::RtxSettings derived = MWRender::RtxSettings::derive(values);
             framed.mSetup.mMirror = derived.mMirror;
+            framed.mSetup.mWeatherFogDistances = derived.mWeatherFogDistances;
 
             // **The layers the command's row says, unless the line names some**: `VerbPolicy`.
             const Rtx::ValidationOptions& validation = command.mLine.mValidation;

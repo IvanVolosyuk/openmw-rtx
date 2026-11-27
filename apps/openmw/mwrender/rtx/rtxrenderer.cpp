@@ -147,6 +147,7 @@ namespace MWRender
         mSky.setInteriorSunlightStrength(setup.mInteriorSunlightStrength);
         mSky.setInteriorWindowSkylight(setup.mInteriorWindowSkylight);
         mSky.setInteriorWindowGodrays(setup.mInteriorWindowGodrays);
+        mSky.setWeatherFogDistances(setup.mWeatherFogDistances);
 
         // **Made here, because there is no viewer to make them.** Every renderer needs the four and
         // one built on `osgViewer` gets them already wired together.
@@ -883,10 +884,31 @@ namespace MWRender
         const bool bounceRays = changed.contains({ "RTX", "bounce rays" });
         const bool reach
             = changed.contains({ "RTX", "distant land cells" }) || changed.contains({ "Camera", "viewing distance" });
+        constexpr std::string_view kWeatherFogSettings[] = {
+            "weather fog distance clear",
+            "weather fog distance cloudy",
+            "weather fog distance foggy",
+            "weather fog distance overcast",
+            "weather fog distance rain",
+            "weather fog distance thunderstorm",
+            "weather fog distance ashstorm",
+            "weather fog distance blight",
+            "weather fog distance snow",
+            "weather fog distance blizzard",
+        };
+        bool weatherFog = false;
+        for (const std::string_view name : kWeatherFogSettings)
+        {
+            if (changed.contains({ "RTX", std::string(name) }))
+            {
+                weatherFog = true;
+                break;
+            }
+        }
         const bool anisotropy = changed.contains({ "General", "anisotropy" });
         const bool gamma = changed.contains({ "Video", "gamma" });
-        if (!upscale && !indirect && !bounceRays && !reach && !anisotropy && !gamma && !lamps && !interiorWindow
-            && !interiorSun && !interiorSkylight && !interiorGodrays)
+        if (!upscale && !indirect && !bounceRays && !reach && !weatherFog && !anisotropy && !gamma && !lamps
+            && !interiorWindow && !interiorSun && !interiorSkylight && !interiorGodrays)
             return;
         const Crash::NoteScope noted("applying the settings the menu changed");
 
@@ -908,6 +930,8 @@ namespace MWRender
             mSky.setInteriorWindowSkylight(settings.mInteriorWindowSkylight);
         if (interiorGodrays)
             mSky.setInteriorWindowGodrays(settings.mInteriorWindowGodrays);
+        if (weatherFog)
+            mSky.setWeatherFogDistances(settings.mWeatherFogDistances);
 
         // **A mode moves under the upscaler the renderer was made with**, and waits under none: the upscaler
         // the menu now names is the next start's.

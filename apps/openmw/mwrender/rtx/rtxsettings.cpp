@@ -10,10 +10,29 @@
 #include <components/rtx/frame/reconstruction.hpp>
 #include <components/rtx/mirror/cells/cellgrid.hpp>
 #include <components/rtx/shaders/gbuffer.h>
+#include <components/rtx/world/weather.hpp>
 #include <components/settings/values.hpp>
 
 namespace MWRender
 {
+    namespace
+    {
+        Rtx::WeatherFogDistances readWeatherFogDistances()
+        {
+            Rtx::WeatherFogDistances distances;
+            distances[Rtx::Weather::Clear] = Settings::rtx().mWeatherFogClear;
+            distances[Rtx::Weather::Cloudy] = Settings::rtx().mWeatherFogCloudy;
+            distances[Rtx::Weather::Foggy] = Settings::rtx().mWeatherFogFoggy;
+            distances[Rtx::Weather::Overcast] = Settings::rtx().mWeatherFogOvercast;
+            distances[Rtx::Weather::Rain] = Settings::rtx().mWeatherFogRain;
+            distances[Rtx::Weather::Thunderstorm] = Settings::rtx().mWeatherFogThunderstorm;
+            distances[Rtx::Weather::Ashstorm] = Settings::rtx().mWeatherFogAshstorm;
+            distances[Rtx::Weather::Blight] = Settings::rtx().mWeatherFogBlight;
+            distances[Rtx::Weather::Snow] = Settings::rtx().mWeatherFogSnow;
+            distances[Rtx::Weather::Blizzard] = Settings::rtx().mWeatherFogBlizzard;
+            return distances;
+        }
+    }
     static_assert(Settings::RTXCategory::sMaxDistantLandCells == Rtx::LandReach::sMostCells,
         "the setting's bound and the reach's are one number");
 
@@ -38,6 +57,7 @@ namespace MWRender
             .mInteriorSunlightStrength = Settings::rtx().mInteriorSunlightStrength.get() / 100.0f,
             .mInteriorWindowSkylight = Settings::rtx().mInteriorWindowSkylight.get() / 100.0f,
             .mInteriorWindowGodrays = Settings::rtx().mInteriorWindowGodrays.get() / 100.0f,
+            .mWeatherFogDistances = readWeatherFogDistances(),
             .mDistantLandCells = Settings::rtx().mDistantLandCells,
             .mViewingDistance = Settings::camera().mViewingDistance,
             .mObjectPaging = Settings::terrain().mObjectPaging,
@@ -75,6 +95,9 @@ namespace MWRender
             throw Rtx::InputError("interior window skylight must be finite and between zero and 30.0");
         if (!(values.mInteriorWindowGodrays >= 0.0f && values.mInteriorWindowGodrays <= 3.0f))
             throw Rtx::InputError("interior window godrays must be finite and between zero and 3.0");
+        for (const float cells : values.mWeatherFogDistances.mCells)
+            if (!(cells >= 0.0f && std::isfinite(cells)))
+                throw Rtx::InputError("weather fog distance must be finite and non-negative");
         assert(values.mUpscale != Rtx::Upscale::Off && "no upscaler named as a mode");
 
         return RtxSettings{
@@ -86,6 +109,7 @@ namespace MWRender
             .mInteriorSunlightStrength = values.mInteriorSunlightStrength,
             .mInteriorWindowSkylight = values.mInteriorWindowSkylight,
             .mInteriorWindowGodrays = values.mInteriorWindowGodrays,
+            .mWeatherFogDistances = values.mWeatherFogDistances,
             .mMirror = {
                 .mReach = { .mCells = values.mDistantLandCells, .mViewingDistance = values.mViewingDistance },
                 .mLamps = values.mLamps,
