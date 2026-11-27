@@ -127,11 +127,11 @@ namespace Rtx
         /// position, into a buffer the reader owns"). False where its run is not admitted, or `stop` asked while the
         /// pool held its most in use.
         bool chain(const ChainPass::Input& input, std::uint8_t first, BufferPool& pool, const std::stop_token& stop,
-            PooledChain& made);
+            PooledChain& made, std::uint64_t order = BufferPool::sUnordered);
 
         /// `ConversionPass` as the device is handed it, as `chain` answers.
         bool convert(const ConversionPass::Input& input, std::uint8_t first, BufferPool& pool,
-            const std::stop_token& stop, PooledChain& made);
+            const std::stop_token& stop, PooledChain& made, std::uint64_t order = BufferPool::sUnordered);
 
         /// What every pass cost since the last take, and nothing counted from here on.
         ContentStats takeStats();
@@ -173,14 +173,14 @@ namespace Rtx
         /// A chain's or a conversion's ask into a buffer of `pool` (`chain`'s pooled form).
         template <ContentPass Pass>
         bool runPooled(Pass& pass, const typename Pass::Input& input, std::uint8_t first, BufferPool& pool,
-            const std::stop_token& stop, PooledChain& made);
+            const std::stop_token& stop, PooledChain& made, std::uint64_t order = BufferPool::sUnordered);
 
         /// The stored entry under `key` read into a buffer of `pool`, where it stands and fits `input`: its last
         /// segment the form's byte, the rest its levels. False where none stands, a segment does not read, or what
         /// reads does not fit, which is discarded.
         template <ContentPass Pass>
         bool readPooled(const ContentStore::Key& key, const typename Pass::Input& input, std::uint8_t first,
-            BufferPool& pool, const std::stop_token& stop, PooledChain& made);
+            BufferPool& pool, const std::stop_token& stop, PooledChain& made, std::uint64_t order = BufferPool::sUnordered);
 
         /// The file key of `texels` a fact's ask is keyed by (`FileKeys::of`), timed as the facts' key.
         ContentStore::Key keyOf(const osg::Image& texels);

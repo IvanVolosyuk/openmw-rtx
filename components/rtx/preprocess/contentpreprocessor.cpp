@@ -91,7 +91,8 @@ namespace Rtx
 
     template <ContentPass Pass>
     bool ContentPreprocessor::readPooled(const ContentStore::Key& key, const typename Pass::Input& input,
-        const std::uint8_t first, BufferPool& pool, const std::stop_token& stop, PooledChain& made)
+        const std::uint8_t first, BufferPool& pool, const std::stop_token& stop, PooledChain& made,
+        const std::uint64_t order)
     {
         std::optional<ContentStore::Opened> opened = mCache.open<Pass>(key);
         if (!opened.has_value())
@@ -129,7 +130,7 @@ namespace Rtx
         // than its file reads none of what it leaves out. Its last level at the most.
         const std::uint32_t from = std::min<std::uint32_t>(first, last - 1);
         std::optional<PooledBuffer> buffer
-            = pool.take(static_cast<std::size_t>(opened->endOf(last - 1) - opened->startOf(from)), stop);
+            = pool.take(static_cast<std::size_t>(opened->endOf(last - 1) - opened->startOf(from)), stop, order);
         if (!buffer.has_value() || !mCache.readSegments(*opened, from, last - from, buffer->bytes()))
             return false;
         made.mFirst = static_cast<std::uint8_t>(from);
@@ -139,11 +140,11 @@ namespace Rtx
 
     template <ContentPass Pass>
     bool ContentPreprocessor::runPooled(Pass& pass, const typename Pass::Input& input, const std::uint8_t first,
-        BufferPool& pool, const std::stop_token& stop, PooledChain& made)
+        BufferPool& pool, const std::stop_token& stop, PooledChain& made, const std::uint64_t order)
     {
         return runCached(
             pass, input,
-            [&](const ContentStore::Key& key) { return readPooled<Pass>(key, input, first, pool, stop, made); },
+            [&](const ContentStore::Key& key) { return readPooled<Pass>(key, input, first, pool, stop, made, order); },
             [&](const std::optional<ContentStore::Key>& key) {
                 // A stop asked while the pool waited is no miss to make: what asked it is going.
                 if (stop.stop_requested())
@@ -161,7 +162,7 @@ namespace Rtx
                 assert(layout.has_value() && "a chain made that fills no layout of its file");
                 const std::uint32_t from = std::min<std::uint32_t>(first, layout->mCount - 1);
                 const std::size_t start = layout->offsetOf(from);
-                std::optional<PooledBuffer> buffer = pool.take(mMade.mBytes.size() - start, stop);
+                std::optional<PooledBuffer> buffer = pool.take(mMade.mBytes.size() - start, stop, order);
                 if (!buffer.has_value())
                     return false;
                 std::ranges::copy(std::span(mMade.mBytes).subspan(start), buffer->bytes().begin());
@@ -221,20 +222,20 @@ namespace Rtx
     }
 
     bool ContentPreprocessor::chain(const ChainPass::Input& input, const std::uint8_t first, BufferPool& pool,
-        const std::stop_token& stop, PooledChain& made)
+        const std::stop_token& stop, PooledChain& made, const std::uint64_t order)
     {
         const Crash::NoteScope noted("making the chain of \"{}\" as {}", SceneUtil::EmbeddedImage::nameOf(input.mImage),
             sTextureEncodings.name(input.mEncoding));
-        return runPooled(mChain, input, first, pool, stop, made);
+        return runPooled(mChain, input, first, pool, stop, made, order);
     }
 
     bool ContentPreprocessor::convert(const ConversionPass::Input& input, const std::uint8_t first, BufferPool& pool,
-        const std::stop_token& stop, PooledChain& made)
+        const std::stop_token& stop, PooledChain& made, const std::uint64_t order)
     {
         const Crash::NoteScope noted("converting \"{}\" with \"{}\" as {}",
             SceneUtil::EmbeddedImage::nameOf(input.mImage), SceneUtil::EmbeddedImage::nameOf(input.mPartner),
             sTextureEncodings.name(input.mEncoding));
-        return runPooled(mConversion, input, first, pool, stop, made);
+        return runPooled(mConversion, input, first, pool, stop, made, order);
     }
 
     ContentPreprocessor::ContentPreprocessor(ContentStore::Store* const store, ChainAdmission* const admission)

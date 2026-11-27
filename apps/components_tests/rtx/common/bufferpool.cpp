@@ -149,5 +149,38 @@ namespace Rtx
             EXPECT_EQ(pool.getHeld().mInUse, 128 * sKiB);
             EXPECT_EQ(pool.getHeld().mFree, 0u) << "a take left what stood past the most";
         }
+
+        /// **Priority order lets only the named head-of-line waiter past the most**, leaving later waiters blocked
+        /// until stopped or room returns.
+        TEST(RtxBufferPoolTest, priorityOrderLetsOnlyTheNamedWaiterPastTheMost)
+        {
+            BufferPool pool(128 * sKiB);
+            std::optional<PooledBuffer> first = pool.take(64 * sKiB, {});
+            std::optional<PooledBuffer> second = pool.take(64 * sKiB, {});
+            ASSERT_TRUE(first.has_value());
+            ASSERT_TRUE(second.has_value());
+
+            std::stop_source stopping;
+            std::optional<PooledBuffer> later;
+            std::thread laterWaiter([&] { later = pool.take(64 * sKiB, stopping.get_token(), 2); });
+
+            std::optional<PooledBuffer> head;
+            std::thread headWaiter([&] { head = pool.take(64 * sKiB, {}, 1); });
+
+            pool.setPriorityOrder(1);
+            headWaiter.join();
+            ASSERT_TRUE(head.has_value()) << "the priority order bypassed a full pool";
+            EXPECT_EQ(pool.getHeld().mInUse, 192 * sKiB);
+
+            pool.setPriorityOrder(BufferPool::sUnordered);
+            stopping.request_stop();
+            laterWaiter.join();
+            EXPECT_FALSE(later.has_value()) << "a non-priority order did not bypass while another held priority";
+
+            head.reset();
+            first.reset();
+            second.reset();
+            EXPECT_EQ(pool.getHeld().mInUse, 0u);
+        }
     }
 }

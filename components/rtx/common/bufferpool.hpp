@@ -74,6 +74,9 @@ namespace Rtx
         static constexpr std::size_t sClassMost = std::size_t{ 1 } << 30;
         static constexpr std::size_t sClassCount = std::bit_width(sClassMost) - std::bit_width(sClassLeast) + 1;
 
+        /// An unordered take, holding no place ahead of the rest.
+        static constexpr std::uint64_t sUnordered = 0;
+
         explicit BufferPool(std::size_t mostBytes);
 
         /// Asserts that every buffer it handed out came back.
@@ -82,9 +85,16 @@ namespace Rtx
         BufferPool(const BufferPool&) = delete;
         BufferPool& operator=(const BufferPool&) = delete;
 
-        /// A buffer of `bytes`, at most `sClassMost`, waiting while every byte of the most is in use and no
-        /// `Overdraft` stands; nothing where `stop` asks before one is given back.
-        std::optional<PooledBuffer> take(std::size_t bytes, const std::stop_token& stop);
+        /// A buffer of `bytes`, at most `sClassMost`, waiting while every byte of the most is in use, no
+        /// `Overdraft` stands, and `order` is not the pool's priority order (`setPriorityOrder`); nothing where
+        /// `stop` asks before one is given back.
+        std::optional<PooledBuffer> take(
+            std::size_t bytes, const std::stop_token& stop, std::uint64_t order = sUnordered);
+
+        /// Names `order` as the one FIFO head-of-line waiter allowed past the most (`sUnordered` for none), waking
+        /// waiters when an active order is named or changed so `TextureHands` cannot deadlock on later jobs holding
+        /// the pool while the oldest waits.
+        void setPriorityOrder(std::uint64_t order);
 
         /// **Every take past the most while it stands**, for a waiter that holds whatever it waits for until it has
         /// it all and gives back nothing meanwhile: a settled hand-over, which stands an arrival's every chain at once
@@ -129,5 +139,8 @@ namespace Rtx
 
         /// How many `Overdraft`s stand.
         std::uint32_t mOverdrafts = 0;
+
+        /// Order allowed past the most (`sUnordered` for none).
+        std::uint64_t mPriorityOrder = sUnordered;
     };
 }

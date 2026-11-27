@@ -76,16 +76,21 @@ namespace Rtx
         return static_cast<std::size_t>(std::bit_width(capacity) - std::bit_width(sClassLeast));
     }
 
-    std::optional<PooledBuffer> BufferPool::take(const std::size_t bytes, const std::stop_token& stop)
+    std::optional<PooledBuffer> BufferPool::take(
+        const std::size_t bytes, const std::stop_token& stop, const std::uint64_t order)
     {
         const std::size_t capacity = classBytesOf(bytes);
         std::vector<std::unique_ptr<std::byte[]>>& own = mFree[classOf(capacity)];
 
         // **Whether a buffer may be made now**, the free ones of other classes dropped for it: under the most, or past
-        // it where nothing else is in use, so a take larger than the pool is made and not waited on for ever, or while
-        // an overdraft stands. One statement, which the take and its wait both read: stated twice, the wait's left
-        // the pool standing empty out, and a take past the most that met a buffer in use waited for ever.
-        const auto mayMake = [&] { return mInUse + capacity <= mMostBytes || mInUse == 0 || mOverdrafts > 0; };
+        // it where nothing else is in use, so a take larger than the pool is made and not waited on for ever, while an
+        // overdraft stands, or when `order` is the priority head-of-line waiter. One statement, which the take and its
+        // wait both read: stated twice, the wait's left the pool standing empty out, and a take past the most that met
+        // a buffer in use waited for ever.
+        const auto mayMake = [&] {
+            return mInUse + capacity <= mMostBytes || mInUse == 0 || mOverdrafts > 0
+                || (order != sUnordered && order == mPriorityOrder);
+        };
 
         // **What is dropped is freed past the lock**, on this thread, which every thread that takes and gives waits on:
         // a take that drops makes a buffer or has the giving threads' excess to drop, which a list costs nothing past.
@@ -169,6 +174,21 @@ namespace Rtx
         const std::scoped_lock lock(mPool.mMutex);
         assert(mPool.mOverdrafts > 0 && "an overdraft ended that did not stand");
         --mPool.mOverdrafts;
+    }
+
+    void BufferPool::setPriorityOrder(const std::uint64_t order)
+    {
+        bool notify = false;
+        {
+            const std::scoped_lock lock(mMutex);
+            if (mPriorityOrder != order)
+            {
+                mPriorityOrder = order;
+                notify = order != sUnordered;
+            }
+        }
+        if (notify)
+            mGiven.notify_all();
     }
 
     PoolHeld BufferPool::getHeld() const

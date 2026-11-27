@@ -6,6 +6,7 @@
 #include <string>
 #include <utility>
 #include <variant>
+#include <vector>
 
 #include <components/contentstore/store.hpp>
 #include <components/platform/thread.hpp>
@@ -122,11 +123,32 @@ namespace Rtx
     {
         Platform::stopThenJoin(
             mHands, [](const std::unique_ptr<Hand>& hand) -> std::jthread& { return hand->mWorker; });
+        mPool.setPriorityOrder(BufferPool::sUnordered);
     }
 
     bool TextureHands::hasCredit() const
     {
         return mMonitor.under([&] { return mCount < sInFlightMost; });
+    }
+
+    std::uint64_t TextureHands::priorityOrderLocked() const
+    {
+        if (mCount == 0 || jobAt(0).mState == JobState::Done)
+            return BufferPool::sUnordered;
+        for (std::size_t age = 1; age < mCount; ++age)
+            if (jobAt(age).mState == JobState::Done && jobAt(age).mHoldsPoolBuffer)
+                return jobAt(0).mOrder;
+        return BufferPool::sUnordered;
+    }
+
+    void TextureHands::popForgottenHeadLocked()
+    {
+        while (mCount > 0 && jobAt(0).mState == JobState::Done && jobAt(0).mForgotten)
+        {
+            jobAt(0) = Job{};
+            mFront = (mFront + 1) % mJobs.size();
+            --mCount;
+        }
     }
 
     void TextureHands::ask(FeedRequest request)
@@ -135,7 +157,7 @@ namespace Rtx
         mMonitor.give([&] {
             assert(mCount < sInFlightMost && "a request past the feed's credit");
             Job& job = jobAt(mCount);
-            job = Job{ .mRequest = std::move(request) };
+            job = Job{ .mRequest = std::move(request), .mOrder = ++mNextOrder };
             ++mCount;
             return true;
         });
@@ -144,6 +166,7 @@ namespace Rtx
     std::optional<FeedArrival> TextureHands::take()
     {
         std::optional<FeedArrival> arrival;
+        std::vector<std::optional<std::variant<FeedMade, FeedFailed>>> discarded;
         mMonitor.under([&] {
             // In the order asked: what a later request made waits for the first.
             while (mCount > 0 && jobAt(0).mState == JobState::Done)
@@ -153,23 +176,38 @@ namespace Rtx
                 --mCount;
                 if (job.mForgotten)
                 {
+                    if (job.mOutcome.has_value())
+                        discarded.push_back(std::move(job.mOutcome));
                     job = Job{};
                     continue;
                 }
                 arrival = FeedArrival{ .mRequest = std::move(job.mRequest), .mOutcome = std::move(*job.mOutcome) };
                 job = Job{};
-                return;
+                break;
             }
+            mPool.setPriorityOrder(priorityOrderLocked());
         });
         return arrival;
     }
 
     void TextureHands::forget(const FeedTicket ticket)
     {
+        std::vector<std::optional<std::variant<FeedMade, FeedFailed>>> dropped;
         mMonitor.under([&] {
             for (std::size_t age = 0; age < mCount; ++age)
                 if (Job& job = jobAt(age); job.mRequest.mTicket == ticket)
+                {
                     job.mForgotten = true;
+                    if (job.mState == JobState::Done)
+                    {
+                        if (job.mOutcome.has_value())
+                            dropped.push_back(std::move(job.mOutcome));
+                        job.mOutcome.reset();
+                        job.mHoldsPoolBuffer = false;
+                    }
+                }
+            popForgottenHeadLocked();
+            mPool.setPriorityOrder(priorityOrderLocked());
         });
     }
 
@@ -210,9 +248,10 @@ namespace Rtx
         return bytes;
     }
 
-    std::variant<FeedMade, FeedFailed> TextureHands::make(
-        Hand& hand, const FeedRequest& request, const std::stop_token& stop)
+    std::variant<FeedMade, FeedFailed> TextureHands::make(Hand& hand, const FeedRequest& request,
+        const std::uint64_t order, const std::stop_token& stop, bool& holdsPoolBuffer)
     {
+        holdsPoolBuffer = false;
         // **The header a model holds, keyed by its derivation**: a chain the store holds whole reads nothing of the
         // file, and a run reads its texels through the header.
         const osg::Image& file = *request.mFile;
@@ -226,13 +265,13 @@ namespace Rtx
                 const ConversionPass::Input input{
                     .mImage = file, .mPartner = *request.mPartner, .mEncoding = encoding, .mRead = &pixels
                 };
-                if (hand.mContent.convert(input, request.mLevels.mFirst, mPool, stop, hand.mChain))
+                if (hand.mContent.convert(input, request.mLevels.mFirst, mPool, stop, hand.mChain, order))
                     layout = ConversionPass::madeLayout(input, hand.mChain.mForm);
             }
             else
             {
                 const ChainPass::Input input{ .mImage = file, .mEncoding = encoding, .mRead = &pixels };
-                if (hand.mContent.chain(input, request.mLevels.mFirst, mPool, stop, hand.mChain))
+                if (hand.mContent.chain(input, request.mLevels.mFirst, mPool, stop, hand.mChain, order))
                     layout = ChainPass::madeLayout(input, hand.mChain.mForm);
             }
         }
@@ -242,6 +281,7 @@ namespace Rtx
         {
             // Held from the first level the request asked, as the hand read it.
             layout->mFirst = hand.mChain.mFirst;
+            holdsPoolBuffer = !hand.mChain.mBytes.isEmpty();
             const osg::ref_ptr<const MadeImage> chain = MadeImage::make(*layout, std::move(hand.mChain.mBytes));
             hand.mChain.mBytes = PooledBuffer();
             made.mLevels.assign(chain->getLevels().begin(), chain->getLevels().end());
@@ -303,10 +343,13 @@ namespace Rtx
             },
             [&](const std::stop_token& asked) {
                 // **A job forgotten before it started is cancelled**: nothing waits for what it would read.
-                const bool forgotten = mMonitor.under([&] { return job->mForgotten; });
+                const auto [forgotten, order]
+                    = mMonitor.under([&] { return std::pair{ job->mForgotten, job->mOrder }; });
                 const FeedRequest request = job->mRequest;
-                std::variant<FeedMade, FeedFailed> outcome
-                    = forgotten ? std::variant<FeedMade, FeedFailed>(FeedFailed{}) : make(hand, request, asked);
+                bool holdsPoolBuffer = false;
+                std::variant<FeedMade, FeedFailed> outcome = forgotten
+                    ? std::variant<FeedMade, FeedFailed>(FeedFailed{})
+                    : make(hand, request, order, asked, holdsPoolBuffer);
 
                 // **A hand lets go of its chains' scratch once the queue is drained**: one miss on a 4096 map held
                 // some 106 MB on this thread for the session.
@@ -314,12 +357,24 @@ namespace Rtx
                     hand.mContent.letGoChainScratch();
 
                 ContentStats stats = hand.mContent.takeStats();
+                std::optional<std::variant<FeedMade, FeedFailed>> discarded;
                 mMonitor.hand([&] {
                     mStats += stats;
                     --mMaking;
-                    job->mOutcome = std::move(outcome);
+                    if (job->mForgotten)
+                    {
+                        discarded = std::move(outcome);
+                        job->mHoldsPoolBuffer = false;
+                    }
+                    else
+                    {
+                        job->mHoldsPoolBuffer = holdsPoolBuffer;
+                        job->mOutcome = std::move(outcome);
+                    }
                     job->mState = JobState::Done;
                     job = nullptr;
+                    popForgottenHeadLocked();
+                    mPool.setPriorityOrder(priorityOrderLocked());
                 });
             });
     }

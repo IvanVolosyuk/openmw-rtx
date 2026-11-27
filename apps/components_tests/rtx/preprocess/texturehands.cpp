@@ -1,5 +1,7 @@
+#include <chrono>
 #include <cstdint>
 #include <optional>
+#include <thread>
 #include <variant>
 #include <vector>
 
@@ -108,6 +110,62 @@ namespace Rtx
                     going.ask(requestOf(loose, 10 + at, 0));
             }
             EXPECT_EQ(pool.getHeld().mInUse, 0u) << "a buffer a dropped request held";
+        }
+
+        /// **A slow head job completes without deadlocking when fast jobs behind it fill the pool**, and forgetting a
+        /// completed job immediately releases its pooled buffer without waiting for `take()`.
+        TEST(RtxTextureHandsTest, slowHeadCompletesWhenLaterJobsFillPoolAndForgetFreesCompletedBuffer)
+        {
+            constexpr std::size_t sSmallPoolBytes = std::size_t{ 128 } << 10;
+            {
+                BufferPool pool(sSmallPoolBytes);
+                TextureHands hands(nullptr, pool, 4, nullptr);
+                const osg::ref_ptr<const osg::Image> slowHead = Testing::makeImage("textures/slow_head.dds", 512, 512);
+                const osg::ref_ptr<const osg::Image> fastTail = Testing::makeImage("textures/fast_tail.dds", 8, 8);
+
+                hands.ask(requestOf(slowHead, 1, 0));
+                for (std::uint32_t ticket = 2; ticket <= 9; ++ticket)
+                    hands.ask(requestOf(fastTail, ticket, 0));
+
+                std::vector<FeedArrival> taken;
+                const auto deadline = std::chrono::steady_clock::now() + std::chrono::seconds(30);
+                while (taken.size() < 9 && std::chrono::steady_clock::now() < deadline)
+                {
+                    if (std::optional<FeedArrival> arrival = hands.take())
+                        taken.push_back(std::move(*arrival));
+                    else
+                        std::this_thread::sleep_for(std::chrono::milliseconds(1));
+                }
+
+                ASSERT_EQ(taken.size(), 9u) << "FIFO head deadlocked waiting for BufferPool room";
+                for (std::uint32_t i = 0; i < 9; ++i)
+                {
+                    EXPECT_EQ(taken[i].mRequest.mTicket, FeedTicket{ i + 1 });
+                    EXPECT_TRUE(std::holds_alternative<FeedMade>(taken[i].mOutcome));
+                }
+                taken.clear();
+                EXPECT_EQ(pool.getHeld().mInUse, 0u);
+            }
+
+            {
+                BufferPool pool(sSmallPoolBytes);
+                TextureHands hands(nullptr, pool, 1, nullptr);
+                const osg::ref_ptr<const osg::Image> loose = Testing::makeImage("textures/loose_forget.dds", 8, 8);
+                hands.ask(requestOf(loose, 1, 0));
+                hands.ask(requestOf(loose, 2, 0));
+                hands.flush();
+                EXPECT_EQ(pool.getHeld().mInUse, std::size_t{ 128 } << 10);
+
+                hands.forget(FeedTicket{ 2 });
+                EXPECT_EQ(pool.getHeld().mInUse, std::size_t{ 64 } << 10)
+                    << "forgetting a completed job must release its pooled buffer immediately";
+
+                std::vector<FeedArrival> taken = takeAll(hands);
+                ASSERT_EQ(taken.size(), 1u);
+                EXPECT_EQ(taken[0].mRequest.mTicket, FeedTicket{ 1 });
+                taken.clear();
+                EXPECT_EQ(pool.getHeld().mInUse, 0u);
+            }
         }
     }
 }

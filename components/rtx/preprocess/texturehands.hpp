@@ -99,8 +99,10 @@ namespace Rtx
         struct Job
         {
             FeedRequest mRequest;
+            std::uint64_t mOrder = BufferPool::sUnordered;
             JobState mState = JobState::Queued;
             bool mForgotten = false;
+            bool mHoldsPoolBuffer = false;
             std::optional<std::variant<FeedMade, FeedFailed>> mOutcome{};
         };
 
@@ -108,10 +110,19 @@ namespace Rtx
 
         void serve(Hand& hand, const std::stop_token& stop);
 
-        /// What a hand makes of `request`.
-        std::variant<FeedMade, FeedFailed> make(Hand& hand, const FeedRequest& request, const std::stop_token& stop);
+        /// What a hand makes of `request`, setting `holdsPoolBuffer` when the result holds a buffer from `mPool`.
+        std::variant<FeedMade, FeedFailed> make(Hand& hand, const FeedRequest& request, std::uint64_t order,
+            const std::stop_token& stop, bool& holdsPoolBuffer);
 
         Job& jobAt(std::size_t age) { return mJobs[(mFront + age) % mJobs.size()]; }
+        const Job& jobAt(std::size_t age) const { return mJobs[(mFront + age) % mJobs.size()]; }
+
+        /// Order of the head-of-line job to allow past the pool cap while completed jobs behind it hold buffers from
+        /// `mPool` (`BufferPool::sUnordered` otherwise). Under `mMonitor`.
+        std::uint64_t priorityOrderLocked() const;
+
+        /// Drops finished forgotten jobs standing at the head of `mJobs`. Under `mMonitor`.
+        void popForgottenHeadLocked();
 
         ContentStore::Store* const mStore;
 
@@ -127,6 +138,7 @@ namespace Rtx
         std::size_t mFront = 0;
         std::size_t mCount = 0;
         std::size_t mMaking = 0;
+        std::uint64_t mNextOrder = 0;
         ContentStats mStats;
 
         /// Each thread's own preprocessor and its thread, last, so the threads are joined before the members they read
