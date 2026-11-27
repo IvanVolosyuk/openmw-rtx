@@ -1834,14 +1834,20 @@ Surface resolve(Hit hit, vec3 origin, vec3 direction, bool detailed, uint normal
     if (HAS_MAPS && ground.mReflecting > 0.0)
     {
         const vec2 gloss = groundGloss(ground);
-        surface.mSpecular = vec3(DIELECTRIC_F0 * gloss.x) * tint;
+        surface.mSpecular = vec3(TERRAIN_DIELECTRIC_F0 * gloss.x) * tint;
         surface.mRoughness = gloss.y;
+        if (frame.mRainOnWater > 0.0 && surface.mPosition.z >= frame.mWaterLevel)
+            surface.mRoughness
+                = max(surface.mRoughness - TERRAIN_RAIN_ROUGHNESS_DROP * frame.mRainOnWater * gloss.x, ROUGHNESS_FLOOR);
     }
     else if (specularMap && surface.mGround)
     {
         const vec2 gloss = sampleDiffuse(materialPast.mSpecular, point).rg;
-        surface.mSpecular = vec3(DIELECTRIC_F0 * gloss.x) * tint;
+        surface.mSpecular = vec3(TERRAIN_DIELECTRIC_F0 * gloss.x) * tint;
         surface.mRoughness = gloss.y;
+        if (frame.mRainOnWater > 0.0 && surface.mPosition.z >= frame.mWaterLevel)
+            surface.mRoughness
+                = max(surface.mRoughness - TERRAIN_RAIN_ROUGHNESS_DROP * frame.mRainOnWater * gloss.x, ROUGHNESS_FLOOR);
     }
     else if (specularMap)
     {
