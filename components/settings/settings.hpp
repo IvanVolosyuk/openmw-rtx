@@ -13,6 +13,7 @@
 #include <osg/Vec3f>
 
 #include <components/detournavigator/collisionshapetype.hpp>
+#include <components/rtx/frame/dielectricf0.hpp>
 #include <components/rtx/frame/upscale.hpp>
 #include <components/sdlutil/vsyncmode.hpp>
 #include <components/vfs/pathutil.hpp>
@@ -126,6 +127,7 @@ namespace Settings
         static void set(std::string_view setting, std::string_view category, SDLUtil::VSyncMode value);
         static void set(std::string_view setting, std::string_view category, Rtx::Upscale value);
         static void set(std::string_view setting, std::string_view category, Rtx::UpscalerChoice value);
+        static void set(std::string_view setting, std::string_view category, Rtx::DielectricF0Mode value);
 
     private:
         static std::set<std::pair<std::string_view, std::string_view>> sInitialized;
@@ -281,6 +283,15 @@ namespace Settings
         std::string_view setting, std::string_view category)
     {
         return readUpscalerChoice(setting, category);
+    }
+
+    Rtx::DielectricF0Mode readDielectricF0Mode(std::string_view setting, std::string_view category);
+
+    template <>
+    inline Rtx::DielectricF0Mode Manager::getImpl<Rtx::DielectricF0Mode>(
+        std::string_view setting, std::string_view category)
+    {
+        return readDielectricF0Mode(setting, category);
     }
 
     template <>

@@ -41,6 +41,8 @@ namespace MWRender
                 .mAnisotropy = 8,
                 .mGamma = 1.5f,
                 .mLitEnvironmentMaps = true,
+                .mDielectricF0Mode = Rtx::DielectricF0Mode::Fixed,
+                .mDielectricF0Base = 0.025f,
             };
         }
 
@@ -68,6 +70,8 @@ namespace MWRender
             EXPECT_EQ(derived.mAnisotropy, 8u);
             EXPECT_EQ(derived.mGamma, 1.5f);
             EXPECT_TRUE(derived.mLitEnvironmentMaps);
+            EXPECT_EQ(derived.mDielectricF0Mode, Rtx::DielectricF0Mode::Fixed);
+            EXPECT_FLOAT_EQ(derived.mDielectricF0Base, 0.025f);
 
             // **And the profile both hosts trace under**, each field the setting's and nothing
             // else of the profile touched: the denoiser and the radiance width stay as stated.
@@ -81,6 +85,8 @@ namespace MWRender
             EXPECT_EQ(profile.mAnisotropy, 8u);
             EXPECT_EQ(profile.mGamma, 1.5f);
             EXPECT_TRUE(profile.mLitEnvironmentMaps);
+            EXPECT_EQ(profile.mDielectricF0Mode, Rtx::DielectricF0Mode::Fixed);
+            EXPECT_FLOAT_EQ(profile.mDielectricF0Base, 0.025f);
             EXPECT_FALSE(profile.mReconstruction.mDenoise);
             EXPECT_EQ(profile.mRadianceWidth, Rtx::RadianceWidth::Shown);
 

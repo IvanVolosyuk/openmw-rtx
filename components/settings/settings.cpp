@@ -472,6 +472,11 @@ namespace Settings
         setString(setting, category, std::string(Rtx::sUpscalerNames.name(value)));
     }
 
+    void Manager::set(std::string_view setting, std::string_view category, Rtx::DielectricF0Mode value)
+    {
+        setString(setting, category, std::string(Rtx::sDielectricF0ModeNames.name(value)));
+    }
+
     void Manager::recordInit(std::string_view setting, std::string_view category)
     {
         sInitialized.emplace(category, setting);
@@ -505,6 +510,18 @@ namespace Settings
                             << Rtx::sUpscalerNames.list() << "), so " << Rtx::sUpscalerNames.name(Rtx::sUpscalerUnread)
                             << " is used";
         return Rtx::sUpscalerUnread;
+    }
+
+    Rtx::DielectricF0Mode readDielectricF0Mode(std::string_view setting, std::string_view category)
+    {
+        const std::string& held = Manager::getString(setting, category);
+        if (const std::optional<Rtx::DielectricF0Mode> mode = Rtx::sDielectricF0ModeNames.named(held))
+            return *mode;
+
+        Log(Debug::Warning) << "[" << category << "] " << setting << " = \"" << held << "\" is not a dielectric F0 mode ("
+                            << Rtx::sDielectricF0ModeNames.list() << "), so "
+                            << Rtx::sDielectricF0ModeNames.name(Rtx::sDielectricF0ModeUnread) << " is used";
+        return Rtx::sDielectricF0ModeUnread;
     }
 
     NavMeshRenderMode parseNavMeshRenderMode(std::string_view value)

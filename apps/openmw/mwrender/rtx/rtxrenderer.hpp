@@ -20,6 +20,7 @@
 #include <components/rtx/common/bufferpool.hpp>
 #include <components/rtx/common/cardaddress.hpp>
 #include <components/rtx/common/stepped.hpp>
+#include <components/rtx/frame/dielectricf0.hpp>
 #include <components/rtx/frame/frameextents.hpp>
 #include <components/rtx/frame/framepast.hpp>
 #include <components/rtx/frame/upscale.hpp>
@@ -454,6 +455,8 @@ namespace MWRender
             std::optional<float> mGamma;
             std::optional<bool> mIndirectLighting;
             std::optional<std::uint32_t> mBounceRays;
+            std::optional<Rtx::DielectricF0Mode> mDielectricF0Mode;
+            std::optional<float> mDielectricF0Base;
             std::optional<Rtx::VerticalSync> mVerticalSync;
         };
         PendingSettings mPending;

@@ -11,7 +11,9 @@
 
 #include <components/rtx/common/namedenum.hpp>
 #include <components/rtx/shaders/gbuffer.h>
+#include <components/rtx/shaders/look.h>
 
+#include "dielectricf0.hpp"
 #include "frameextents.hpp"
 #include "surfaceview.hpp"
 #include "upscale.hpp"
@@ -385,6 +387,12 @@ namespace Rtx
         /// `[Shaders] apply lighting to environment maps` asks the rasterizer, rather than light of
         /// its own past it — `VisibilityConstants::mLitEnvironmentMaps`. Off, the setting's default.
         bool mLitEnvironmentMaps = false;
+
+        /// Which non-metal specular F0 rule runs (`VisibilityConstants::mDielectricF0Mode`).
+        DielectricF0Mode mDielectricF0Mode = DielectricF0Mode::AlbedoLuma;
+
+        /// Base normal-incidence reflectance for non-metals across all 3 F0 modes (`VisibilityConstants::mDielectricF0Base`).
+        float mDielectricF0Base = Shaders::DIELECTRIC_F0;
 
         /// What every pixel is painted with: the light, or a surface input for a picture of the
         /// maps themselves.

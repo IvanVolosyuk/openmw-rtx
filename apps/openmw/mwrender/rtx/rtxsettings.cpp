@@ -69,6 +69,8 @@ namespace MWRender
             .mAnisotropy = Settings::general().mAnisotropy,
             .mGamma = Settings::video().mGamma,
             .mLitEnvironmentMaps = Settings::shaders().mApplyLightingToEnvironmentMaps,
+            .mDielectricF0Mode = Settings::rtx().mDielectricF0Mode.get(),
+            .mDielectricF0Base = Settings::rtx().mDielectricF0Base,
         };
     }
 
@@ -98,6 +100,9 @@ namespace MWRender
         for (const float cells : values.mWeatherFogDistances.mCells)
             if (!(cells >= 0.0f && std::isfinite(cells)))
                 throw Rtx::InputError("weather fog distance must be finite and non-negative");
+        if (!(std::isfinite(values.mDielectricF0Base) && values.mDielectricF0Base >= 0.0f
+                && values.mDielectricF0Base <= 1.0f))
+            throw Rtx::InputError("dielectric F0 base must be finite and between 0.0 and 1.0");
         assert(values.mUpscale != Rtx::Upscale::Off && "no upscaler named as a mode");
 
         return RtxSettings{
@@ -123,6 +128,8 @@ namespace MWRender
             .mAnisotropy = static_cast<std::uint32_t>(std::max(values.mAnisotropy, 1)),
             .mGamma = values.mGamma,
             .mLitEnvironmentMaps = values.mLitEnvironmentMaps,
+            .mDielectricF0Mode = values.mDielectricF0Mode,
+            .mDielectricF0Base = values.mDielectricF0Base,
         };
     }
 
@@ -135,5 +142,7 @@ namespace MWRender
         profile.mAnisotropy = mAnisotropy;
         profile.mGamma = mGamma;
         profile.mLitEnvironmentMaps = mLitEnvironmentMaps;
+        profile.mDielectricF0Mode = mDielectricF0Mode;
+        profile.mDielectricF0Base = mDielectricF0Base;
     }
 }

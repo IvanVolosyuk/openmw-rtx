@@ -30,6 +30,7 @@
 #include <components/rtx/common/runs.hpp>
 #include <components/rtx/frame/camera.hpp>
 #include <components/rtx/frame/debuglines.hpp>
+#include <components/rtx/frame/dielectricf0.hpp>
 #include <components/rtx/frame/frameoptions.hpp>
 #include <components/rtx/frame/reconstruction.hpp>
 #include <components/rtx/frame/surfaceview.hpp>
@@ -460,6 +461,9 @@ namespace Rtx::Testing
         /// `RenderProfile::mLitEnvironmentMaps` over the harness's, which leaves a sheet unlit.
         std::optional<bool> mLitEnvironmentMaps{};
 
+        /// `RenderProfile::mDielectricF0Mode` over the harness's, where a test checks one rule specifically.
+        std::optional<DielectricF0Mode> mDielectricF0Mode{};
+
         /// `RenderProfile::mDither` over the harness's, which dithers nothing.
         std::optional<bool> mDither{};
 
@@ -593,6 +597,7 @@ namespace Rtx::Testing
                                                                 : ExposureRule(MeasuredExposure{}),
                         .mShow = shot.mShow,
                         .mLitEnvironmentMaps = shot.mLitEnvironmentMaps,
+                        .mDielectricF0Mode = shot.mDielectricF0Mode,
                         .mDither = shot.mDither,
                         .mJitter = shot.mOffset,
                         .mDebug = shot.mDebug },

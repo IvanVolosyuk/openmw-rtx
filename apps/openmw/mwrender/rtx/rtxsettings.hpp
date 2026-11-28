@@ -2,9 +2,11 @@
 
 #include <cstdint>
 
+#include <components/rtx/frame/dielectricf0.hpp>
 #include <components/rtx/frame/reconstruction.hpp>
 #include <components/rtx/frame/upscale.hpp>
 #include <components/rtx/mirror/lightbuilder.hpp>
+#include <components/rtx/shaders/look.h>
 #include <components/rtx/world/fogbuilder.hpp>
 
 #include "mirrorknobs.hpp"
@@ -38,6 +40,8 @@ namespace MWRender
         std::int32_t mAnisotropy = 0;
         float mGamma = 1.0f;
         bool mLitEnvironmentMaps = false;
+        Rtx::DielectricF0Mode mDielectricF0Mode = Rtx::DielectricF0Mode::AlbedoLuma;
+        float mDielectricF0Base = Rtx::Shaders::DIELECTRIC_F0;
 
         /// `[RTX]`, `[Camera] viewing distance`, `[Terrain]`'s paging, `[Groundcover]`, `[General] anisotropy`,
         /// `[Video] gamma` and `[Shaders] apply lighting to environment maps`: the one place the
@@ -79,6 +83,10 @@ namespace MWRender
 
         /// `RenderProfile::mLitEnvironmentMaps`: the setting.
         bool mLitEnvironmentMaps = false;
+
+        /// `RenderProfile::mDielectricF0Mode` and `RenderProfile::mDielectricF0Base`: the settings.
+        Rtx::DielectricF0Mode mDielectricF0Mode = Rtx::DielectricF0Mode::AlbedoLuma;
+        float mDielectricF0Base = Rtx::Shaders::DIELECTRIC_F0;
 
         /// Throws `Rtx::InputError` for a gamma that is not a finite number greater than nought, and for
         /// a count of bounce rays outside one to `Shaders::MAX_BOUNCE_RAYS`: a setting refused rather than

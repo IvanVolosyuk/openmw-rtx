@@ -1271,6 +1271,9 @@ struct Surface
     /// the same crack by them, and Night-Eye's lift is held to no occlusion. `occludedAlbedo` applies it.
     float mOcclusion;
 
+    /// Metalness from the surface's `_spec` map (`painted.x`), zero for dielectrics and terrain.
+    float mMetal;
+
     /// The material's own glow, as a lighting term. See `GpuMaterial::mEmissiveColour`.
     vec3 mEmissiveColour;
 
@@ -1348,6 +1351,7 @@ Surface noSurface(vec3 origin)
     surface.mSpecular = vec3(0.0);
     surface.mRoughness = 1.0;
     surface.mOcclusion = 1.0;
+    surface.mMetal = 0.0;
     surface.mEmissiveColour = vec3(0.0);
     surface.mEmitted = vec3(0.0);
     surface.mDistance = frame.mReach;
@@ -1636,6 +1640,7 @@ Surface resolve(Hit hit, vec3 origin, vec3 direction, bool detailed, uint normal
     // layer's albedo is — the layers' own where they have a map and straight up where not — and what their
     // maps lost.
     GroundSum ground = noGround();
+    float groundHeight = 0.0;
     float spread = 0.0;
     vec3 painted = vec3(0.0);
     bool relief = false;
@@ -1747,8 +1752,10 @@ Surface resolve(Hit hit, vec3 origin, vec3 direction, bool detailed, uint normal
 
             if (HAS_MAPS)
             {
-                painted += showing * (mapped ? sampleNormalMap(layer.mNormal, at) : vec3(0.0, 0.0, 1.0));
+                const vec4 normSample = mapped ? sampleDiffuse(layer.mNormal, at) : vec4(0.5, 0.5, 1.0, 1.0);
+                painted += showing * (mapped ? decodeNormal(normSample.rgb) : vec3(0.0, 0.0, 1.0));
                 spread += mapped ? showing * normalMapSlopes(layer.mNormal, at) : 0.0;
+                groundHeight += showing * ((mapped && (layer.mFlags & LAYER_PARALLAX) != 0u) ? normSample.a : 1.0);
                 relief = relief || mapped;
             }
         }
@@ -1834,20 +1841,26 @@ Surface resolve(Hit hit, vec3 origin, vec3 direction, bool detailed, uint normal
     if (HAS_MAPS && ground.mReflecting > 0.0)
     {
         const vec2 gloss = groundGloss(ground);
-        surface.mSpecular = vec3(TERRAIN_DIELECTRIC_F0 * gloss.x) * tint;
         surface.mRoughness = gloss.y;
         if (frame.mRainOnWater > 0.0 && surface.mPosition.z >= frame.mWaterLevel)
             surface.mRoughness
                 = max(surface.mRoughness - TERRAIN_RAIN_ROUGHNESS_DROP * frame.mRainOnWater * gloss.x, ROUGHNESS_FLOOR);
+        const float f0 = dielectricF0ForMode(
+            frame.mDielectricF0Mode, surface.mRoughness, frame.mDielectricF0Base, dot(albedo, LUMINANCE_WEIGHTS));
+        surface.mSpecular = vec3(f0 * gloss.x) * tint;
+        if (frame.mDielectricF0Mode == DIELECTRIC_F0_MODE_ALBEDO_LUMA && ground.mWeights > 0.0)
+            surface.mOcclusion = groundHeightOcclusion(clamp(groundHeight / ground.mWeights, 0.0, 1.0));
     }
     else if (specularMap && surface.mGround)
     {
         const vec2 gloss = sampleDiffuse(materialPast.mSpecular, point).rg;
-        surface.mSpecular = vec3(TERRAIN_DIELECTRIC_F0 * gloss.x) * tint;
         surface.mRoughness = gloss.y;
         if (frame.mRainOnWater > 0.0 && surface.mPosition.z >= frame.mWaterLevel)
             surface.mRoughness
                 = max(surface.mRoughness - TERRAIN_RAIN_ROUGHNESS_DROP * frame.mRainOnWater * gloss.x, ROUGHNESS_FLOOR);
+        const float f0 = dielectricF0ForMode(
+            frame.mDielectricF0Mode, surface.mRoughness, frame.mDielectricF0Base, dot(albedo, LUMINANCE_WEIGHTS));
+        surface.mSpecular = vec3(f0 * gloss.x) * tint;
     }
     else if (specularMap)
     {
@@ -1858,9 +1871,12 @@ Surface resolve(Hit hit, vec3 origin, vec3 direction, bool detailed, uint normal
 
         const vec4 painted = sampleDiffuse(materialPast.mSpecular, point);
         const float metal = painted.x;
-        surface.mSpecular = mix(vec3(DIELECTRIC_F0), albedo, metal) * tint;
         surface.mRoughness = painted.y;
+        const float f0 = dielectricF0ForMode(
+            frame.mDielectricF0Mode, surface.mRoughness, frame.mDielectricF0Base, dot(albedo, LUMINANCE_WEIGHTS));
+        surface.mSpecular = mix(vec3(f0), albedo, metal) * tint;
         surface.mOcclusion = painted.z;
+        surface.mMetal = metal;
         surface.mAlbedo *= 1.0 - metal;
         surface.mAmbientAlbedo *= 1.0 - metal;
     }

@@ -319,6 +319,70 @@ namespace Rtx::Shaders
         return clamp(SPECULAR_EDGE_SCALE * green, 0.0f, 1.0f);
     }
 
+    /// Linearly decayed non-metal F0 from `baseF0` at `DIELECTRIC_F0_DECAY_START` to proportionally scaled
+    /// floor at `DIELECTRIC_F0_DECAY_END`.
+    RTX_SHADER float dielectricF0Linear(float roughness, float baseF0)
+    {
+        const float t = clamp((roughness - DIELECTRIC_F0_DECAY_START)
+                / (DIELECTRIC_F0_DECAY_END - DIELECTRIC_F0_DECAY_START),
+            0.0f, 1.0f);
+        const float floorF0 = baseF0 * (DIELECTRIC_F0_FLOOR / DIELECTRIC_F0);
+        return baseF0 + (floorF0 - baseF0) * t;
+    }
+
+    /// The reflectance at normal incidence of a non-metal at `roughness`: `DIELECTRIC_F0` up to
+    /// `DIELECTRIC_F0_DECAY_START`, decaying linearly to `DIELECTRIC_F0_FLOOR` at `DIELECTRIC_F0_DECAY_END`.
+    RTX_SHADER float dielectricF0(float roughness)
+    {
+        return dielectricF0Linear(roughness, DIELECTRIC_F0);
+    }
+
+    /// Rough albedo-luminance cavity multiplier for rough non-metals (`DIELECTRIC_F0_MODE_ALBEDO_LUMA`).
+    RTX_SHADER float roughAlbedoCavity(float luminance, float roughness)
+    {
+        const float s = clamp((roughness - DIELECTRIC_ALBEDO_CAVITY_START)
+                / (DIELECTRIC_ALBEDO_CAVITY_END - DIELECTRIC_ALBEDO_CAVITY_START),
+            0.0f, 1.0f);
+        const float roughMask = s * s * (3.0f - 2.0f * s);
+        const float factor = clamp(
+            pow(max(luminance / DIELECTRIC_ALBEDO_CAVITY_REF_LUMA, 1e-4f), DIELECTRIC_ALBEDO_CAVITY_POWER),
+            DIELECTRIC_ALBEDO_CAVITY_FLOOR, 1.0f);
+        return 1.0f + (factor - 1.0f) * (DIELECTRIC_ALBEDO_CAVITY_STRENGTH * roughMask);
+    }
+
+    /// Selects the non-metal normal-incidence reflectance `F0` from `baseF0` for the active `mode`.
+    RTX_SHADER float dielectricF0ForMode(uint mode, float roughness, float baseF0, float albedoLuminance)
+    {
+        if (mode == DIELECTRIC_F0_MODE_LINEAR)
+            return dielectricF0Linear(roughness, baseF0);
+        if (mode == DIELECTRIC_F0_MODE_ALBEDO_LUMA)
+            return baseF0 * roughAlbedoCavity(albedoLuminance, roughness);
+        return baseF0;
+    }
+
+    /// Quadratic attenuation of dielectric grazing `F90` at high roughness.
+    RTX_SHADER float roughF90Curve(float roughness)
+    {
+        const float t
+            = clamp((roughness - DIELECTRIC_F90_DECAY_START) / (1.0f - DIELECTRIC_F90_DECAY_START), 0.0f, 1.0f);
+        return 1.0f + (DIELECTRIC_F90_FLOOR - 1.0f) * (t * t);
+    }
+
+    /// Lagarde (2014) specular micro-occlusion from view cosine, cavity occlusion, and perceptual roughness.
+    RTX_SHADER float lagardeSpecOcclusion(float cosine, float occlusion, float roughness)
+    {
+        return clamp(
+            pow(max(cosine + occlusion, 1e-4f), exp2(-16.0f * roughness - 1.0f)) - 1.0f + occlusion, 0.0f, 1.0f);
+    }
+
+    /// Cavity ambient occlusion derived from stacked terrain layer height under `DIELECTRIC_F0_MODE_ALBEDO_LUMA`.
+    RTX_SHADER float groundHeightOcclusion(float height)
+    {
+        const float s = clamp((height - 0.08f) / 0.80f, 0.0f, 1.0f);
+        const float smoothH = s * s * (3.0f - 2.0f * s);
+        return clamp(mix(1.0f - DIELECTRIC_GRASS_HEIGHT_AO, 1.0f, smoothH), 0.04f, 1.0f);
+    }
+
     /// What a mapped normal's light is kept of as the light nears the horizon of the surface the map
     /// was laid on: Conty Estevez, Lecocq and Stein's GGX shadowing ("A Microfacet-Based Shadowing
     /// Function to Solve the Bump Terminator Problem", 2019), as Cycles takes it

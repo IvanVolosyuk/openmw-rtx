@@ -60,6 +60,7 @@
 #include <components/resource/scenemanager.hpp>
 #include <components/rtx/common/clock.hpp>
 #include <components/rtx/frame/camera.hpp>
+#include <components/rtx/frame/dielectricf0.hpp>
 #include <components/rtx/frame/frameextents.hpp>
 #include <components/rtx/frame/frameoptions.hpp>
 #include <components/rtx/frame/upscale.hpp>
@@ -882,6 +883,8 @@ namespace MWRender
         const bool upscale = changed.contains({ "RTX", "upscale" });
         const bool indirect = changed.contains({ "RTX", "indirect lighting" });
         const bool bounceRays = changed.contains({ "RTX", "bounce rays" });
+        const bool dielectricF0Mode = changed.contains({ "RTX", "dielectric f0 mode" });
+        const bool dielectricF0Base = changed.contains({ "RTX", "dielectric f0 base" });
         const bool reach
             = changed.contains({ "RTX", "distant land cells" }) || changed.contains({ "Camera", "viewing distance" });
         constexpr std::string_view kWeatherFogSettings[] = {
@@ -907,8 +910,9 @@ namespace MWRender
         }
         const bool anisotropy = changed.contains({ "General", "anisotropy" });
         const bool gamma = changed.contains({ "Video", "gamma" });
-        if (!upscale && !indirect && !bounceRays && !reach && !weatherFog && !anisotropy && !gamma && !lamps
-            && !interiorWindow && !interiorSun && !interiorSkylight && !interiorGodrays)
+        if (!upscale && !indirect && !bounceRays && !dielectricF0Mode && !dielectricF0Base && !reach && !weatherFog
+            && !anisotropy && !gamma && !lamps && !interiorWindow && !interiorSun && !interiorSkylight
+            && !interiorGodrays)
             return;
         const Crash::NoteScope noted("applying the settings the menu changed");
 
@@ -951,6 +955,10 @@ namespace MWRender
             mPending.mIndirectLighting = settings.mIndirectLighting;
         if (bounceRays)
             mPending.mBounceRays = settings.mBounceRays;
+        if (dielectricF0Mode)
+            mPending.mDielectricF0Mode = settings.mDielectricF0Mode;
+        if (dielectricF0Base)
+            mPending.mDielectricF0Base = settings.mDielectricF0Base;
     }
 
     MyGUI::ITexture& RtxRenderer::freezeFrame() noexcept
@@ -1068,6 +1076,10 @@ namespace MWRender
             mRenderer->setIndirectLighting(*pending.mIndirectLighting);
         if (pending.mBounceRays.has_value())
             mRenderer->setBounceRays(*pending.mBounceRays);
+        if (pending.mDielectricF0Mode.has_value())
+            mRenderer->setDielectricF0Mode(*pending.mDielectricF0Mode);
+        if (pending.mDielectricF0Base.has_value())
+            mRenderer->setDielectricF0Base(*pending.mDielectricF0Base);
 
         // A frame under a cover is the interface alone: no walk, as the update traversal did not run, and no
         // trace, as the interface covers every pixel. The sweep goes with the walk, which marked nothing and

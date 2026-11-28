@@ -1445,7 +1445,8 @@ namespace Rtx::Testing
                           .mReach = 500.0f,
                       });
 
-                      const Frame frame = shoot(scene, textures, camera, size, Shot{ .mShow = show });
+                      const Frame frame = shoot(scene, textures, camera, size,
+                          Shot{ .mShow = show, .mDielectricF0Mode = DielectricF0Mode::Linear });
                       EXPECT_GT(frame.mHits, 0u);
                       return osg::Vec3f(frame.at(centre), frame.at(centre + 1), frame.at(centre + 2));
                   };
@@ -1464,7 +1465,7 @@ namespace Rtx::Testing
                 const float toLight = facing * toLamp;
                 const float eyeCosine = facing * toEye;
 
-                const float reflectance = (metal * base + (1.0f - metal) * Shaders::DIELECTRIC_F0) * tint;
+                const float reflectance = (metal * base + (1.0f - metal) * Shaders::dielectricF0(roughness)) * tint;
                 const float alpha = Shaders::ggxAlpha(roughness);
                 const osg::Vec2f table = specularAlbedoAt(eyeCosine, roughness);
                 const float fresnel = Shaders::fresnelSchlick(
@@ -1487,10 +1488,13 @@ namespace Rtx::Testing
             const float dielectric = expected(normal, normal, normal, 0.0f);
             EXPECT_NEAR(lit(0, false).x(), dielectric, dielectric * 1e-4f) << "a dielectric";
 
+            const float baseF0 = Shaders::dielectricF0(roughness);
             const float tinted = expected(normal, normal, normal, 0.0f, 0.25f);
             EXPECT_NEAR(lit(0, false, SurfaceView::Shaded, 0.25f).x(), tinted, tinted * 1e-4f) << "a tinted dielectric";
-            EXPECT_EQ(lit(0, false, SurfaceView::Specular, 0.25f), osg::Vec3f(0.01f, 0.01f, 0.04f))
-                << "the tint on the reflectance";
+            const osg::Vec3f tintedSpec = lit(0, false, SurfaceView::Specular, 0.25f);
+            EXPECT_NEAR(tintedSpec.x(), baseF0 * 0.25f, 1e-6f) << "the tint on the reflectance";
+            EXPECT_NEAR(tintedSpec.y(), baseF0 * 0.25f, 1e-6f) << "the tint on the reflectance";
+            EXPECT_NEAR(tintedSpec.z(), baseF0, 1e-6f) << "the tint on the reflectance";
 
             // The lobe's light is divided by its albedo held at `SPECULAR_ALBEDO_FLOOR` from below: the
             // dielectric's own at the eye's 45°, and a hue of a twentieth in red and green, which takes their
@@ -1502,7 +1506,7 @@ namespace Rtx::Testing
                 return Shaders::specularAlbedoOf(reflectance, Shaders::specularEdge(green), table.x(), table.y())
                     * Shaders::specularCompensation(reflectance, table.y());
             };
-            const float dielectricF0 = Shaders::DIELECTRIC_F0;
+            const float dielectricF0 = Shaders::dielectricF0(roughness);
             const float clear = albedoOf(dielectricF0, dielectricF0);
             ASSERT_GT(clear, Shaders::SPECULAR_ALBEDO_FLOOR);
             ASSERT_LT(albedoOf(dielectricF0 * 0.05f, dielectricF0 * 0.05f), Shaders::SPECULAR_ALBEDO_FLOOR);
@@ -3326,7 +3330,8 @@ namespace Rtx::Testing
                             .mPositions = sheetAt(4000.0f, 0.0f), .mTexCoords = sQuadUv, .mIndices = sQuadIndices }),
                     .mMaterial = scene.addMaterial(Material{ .mDiffuse = diffuse, .mSpecular = map }) });
 
-                const Frame frame = shoot(scene, textures, camera, size, { .mFrames = 4 });
+                const Frame frame = shoot(scene, textures, camera, size,
+                    Shot{ .mFrames = 4, .mDielectricF0Mode = DielectricF0Mode::Linear });
                 EXPECT_EQ(frame.mHits, size * size);
 
                 double sum = 0.0;
@@ -3347,7 +3352,8 @@ namespace Rtx::Testing
             EXPECT_GT(std::abs(white - double{ sky } * whole), 0.04) << "and not the lobe's albedo uncompensated";
 
             const float metal = 128.0f / 255.0f;
-            const float reflectance = Shaders::DIELECTRIC_F0 + (1.0f - Shaders::DIELECTRIC_F0) * metal;
+            const float baseF0 = Shaders::dielectricF0(roughness);
+            const float reflectance = baseF0 + (1.0f - baseF0) * metal;
             const float edge = Shaders::specularEdge(reflectance);
             const double scattering = 1.0 - double{ metal };
 

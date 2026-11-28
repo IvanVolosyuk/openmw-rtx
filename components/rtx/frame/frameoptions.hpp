@@ -6,6 +6,7 @@
 #include <osg/Vec2f>
 
 #include "debuglines.hpp"
+#include "dielectricf0.hpp"
 #include "framepast.hpp"
 #include "reconstruction.hpp"
 #include "surfaceview.hpp"
@@ -59,6 +60,8 @@ namespace Rtx
         /// the profile's: what a test of one surface input asks for.
         std::optional<SurfaceView> mShow{};
         std::optional<bool> mLitEnvironmentMaps{};
+        std::optional<DielectricF0Mode> mDielectricF0Mode{};
+        std::optional<float> mDielectricF0Base{};
 
         /// Whether the display curve dithers its store, in place of the profile's: what a test of
         /// the dither asks for, over a harness that turns it off.

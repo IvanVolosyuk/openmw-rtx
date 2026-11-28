@@ -57,6 +57,49 @@ namespace Rtx
                 }
         }
 
+        TEST(RtxBrdfTest, dielectricF0DecaysLinearlyAcrossRoughnessRange)
+        {
+            EXPECT_EQ(Shaders::dielectricF0(0.0f), Shaders::DIELECTRIC_F0);
+            EXPECT_EQ(Shaders::dielectricF0(0.5f), Shaders::DIELECTRIC_F0);
+            EXPECT_NEAR(
+                Shaders::dielectricF0(0.7f), 0.5f * (Shaders::DIELECTRIC_F0 + Shaders::DIELECTRIC_F0_FLOOR), 1e-6f);
+            EXPECT_EQ(Shaders::dielectricF0(0.9f), Shaders::DIELECTRIC_F0_FLOOR);
+            EXPECT_EQ(Shaders::dielectricF0(1.0f), Shaders::DIELECTRIC_F0_FLOOR);
+
+            EXPECT_EQ(Shaders::dielectricF0Linear(0.5f, 0.0f), 0.0f);
+            EXPECT_EQ(Shaders::dielectricF0Linear(0.9f, 0.0f), 0.0f);
+            EXPECT_NEAR(Shaders::dielectricF0Linear(0.5f, 0.08f), 0.08f, 1e-6f);
+            EXPECT_NEAR(Shaders::dielectricF0Linear(0.9f, 0.08f), 0.002f, 1e-6f);
+        }
+
+        TEST(RtxBrdfTest, dielectricF0ModesAndTheoryCurvesMatchExpectedBounds)
+        {
+            EXPECT_EQ(
+                Shaders::dielectricF0ForMode(Shaders::DIELECTRIC_F0_MODE_FIXED, 0.96f, 0.06f, 0.04f), 0.06f);
+            EXPECT_NEAR(Shaders::dielectricF0ForMode(Shaders::DIELECTRIC_F0_MODE_LINEAR, 0.7f, 0.08f, 0.04f),
+                0.5f * (0.08f + 0.002f), 1e-6f);
+
+            // Smooth surface: roughAlbedoCavity leaves baseF0 unchanged regardless of luminance.
+            EXPECT_NEAR(
+                Shaders::dielectricF0ForMode(Shaders::DIELECTRIC_F0_MODE_ALBEDO_LUMA, 0.4f, 0.04f, 0.02f), 0.04f,
+                1e-6f);
+            // Reference luminance (0.18) keeps factor at 1.0 even on ultra-rough surfaces.
+            EXPECT_NEAR(
+                Shaders::dielectricF0ForMode(Shaders::DIELECTRIC_F0_MODE_ALBEDO_LUMA, 1.0f, 0.05f, 0.18f), 0.05f,
+                1e-6f);
+            // Dark rough crevices attenuate F0 smoothly toward 1 - DIELECTRIC_ALBEDO_CAVITY_STRENGTH * (1 - floor).
+            EXPECT_LT(
+                Shaders::dielectricF0ForMode(Shaders::DIELECTRIC_F0_MODE_ALBEDO_LUMA, 0.96f, 0.04f, 0.03f), 0.025f);
+
+            EXPECT_EQ(Shaders::roughF90Curve(0.2f), 1.0f);
+            EXPECT_NEAR(Shaders::roughF90Curve(1.0f), Shaders::DIELECTRIC_F90_FLOOR, 1e-6f);
+            EXPECT_NEAR(Shaders::lagardeSpecOcclusion(0.15f, 0.35f, 0.96f), 0.35f, 1e-3f);
+            EXPECT_LT(Shaders::lagardeSpecOcclusion(0.15f, 0.35f, 0.0f), 0.10f);
+            EXPECT_NEAR(Shaders::lagardeSpecOcclusion(1.0f, 1.0f, 0.5f), 1.0f, 1e-6f);
+            EXPECT_NEAR(Shaders::groundHeightOcclusion(0.0f), 1.0f - Shaders::DIELECTRIC_GRASS_HEIGHT_AO, 1e-6f);
+            EXPECT_NEAR(Shaders::groundHeightOcclusion(1.0f), 1.0f, 1e-6f);
+        }
+
         /// Smith's masking for GGX, `G1 = 1 / (1 + Λ)` with `Λ = (sqrt(1 + α² tan²θ) - 1) / 2`: the form
         /// `brdf.h` does not write, in double, for the tests to hold its forms to.
         double smithMasking(double alpha, double cosine)

@@ -57,6 +57,11 @@ struct Gloss
     /// The surface's diffuse albedo, `Surface::mAlbedo`: what a light's weight reads beside the lobe
     /// (`surfaceCandidate`), carried here because every asker of the one asks the other.
     vec3 mDiffuse;
+
+    /// Lagarde (2014) specular occlusion multipliers for indirect and direct specular paths (`1.0` unless
+    /// `DIELECTRIC_F0_MODE_ALBEDO_LUMA` is active).
+    float mSpecAoInd;
+    float mSpecAoDir;
 };
 
 /// The surface's specular half, or a record whose `mGlossy` is false.
@@ -73,6 +78,8 @@ Gloss glossOf(Surface surface)
     gloss.mCompensation = vec3(1.0);
     gloss.mAlbedo = vec3(0.0);
     gloss.mDiffuse = surface.mAlbedo;
+    gloss.mSpecAoInd = 1.0;
+    gloss.mSpecAoDir = 1.0;
 
     if (!HAS_MAPS || !(brightest(surface.mSpecular) > 0.0))
         return gloss;
@@ -84,11 +91,23 @@ Gloss glossOf(Surface surface)
 
     gloss.mGlossy = true;
     gloss.mEdge = specularEdge(surface.mSpecular.g);
+    if (frame.mDielectricF0Mode == DIELECTRIC_F0_MODE_ALBEDO_LUMA)
+    {
+        const float f90Diel = gloss.mEdge * roughF90Curve(surface.mRoughness);
+        gloss.mEdge = mix(f90Diel, gloss.mEdge, surface.mMetal);
+
+        const float aoBase = clamp(surface.mOcclusion, 0.01, 1.0);
+        const float aoShaped = mix(pow(aoBase, DIELECTRIC_SPEC_AO_POWER), aoBase, surface.mMetal);
+        const float specAo = lagardeSpecOcclusion(gloss.mToEyeCosine, aoShaped, surface.mRoughness);
+        gloss.mSpecAoInd = mix(1.0, specAo, DIELECTRIC_SPEC_AO_IND);
+        gloss.mSpecAoDir = mix(1.0, specAo, DIELECTRIC_SPEC_AO_DIR);
+    }
     gloss.mAlpha = ggxAlpha(surface.mRoughness);
 
     const vec2 table = specularAlbedoAt(gloss.mToEyeCosine, surface.mRoughness);
     gloss.mCompensation = specularCompensation(surface.mSpecular, table.y);
-    gloss.mAlbedo = specularAlbedoOf(surface.mSpecular, gloss.mEdge, table.x, table.y) * gloss.mCompensation;
+    gloss.mAlbedo = specularAlbedoOf(surface.mSpecular, gloss.mEdge, table.x, table.y) * gloss.mCompensation
+        * gloss.mSpecAoInd;
 
     return gloss;
 }
@@ -164,7 +183,7 @@ Reflection reflectionAt(Gloss gloss, vec3 side, vec3 towards, float sine)
     const float lobe = ggxDistribution(gloss.mAlpha, max(dot(gloss.mNormal, halfway), 0.0))
         * smithVisibility(gloss.mAlpha, gloss.mToEyeCosine, toLight) * toLight * normalisation;
 
-    return Reflection(fresnel * gloss.mCompensation * lobe, fresnel);
+    return Reflection(fresnel * gloss.mCompensation * (lobe * gloss.mSpecAoDir), fresnel);
 }
 
 /// A direction the lobe reflects the eye's ray into, and what light arriving along it is worth.
@@ -204,7 +223,7 @@ LobeSample lobeSample(Gloss gloss, vec2 draw)
 
     sampled.mWeight = fresnelAt(gloss, halfway) * gloss.mCompensation
         * (smithShadowingGivenMasking(gloss.mAlpha, gloss.mToEyeCosine, toLight)
-            * boundedWeight(eye, gloss.mAlpha, bound));
+            * boundedWeight(eye, gloss.mAlpha, bound) * gloss.mSpecAoInd);
 
     return sampled;
 }

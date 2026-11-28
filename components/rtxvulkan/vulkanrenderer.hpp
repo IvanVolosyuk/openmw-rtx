@@ -11,6 +11,7 @@
 #include <components/rtx/common/cardaddress.hpp>
 #include <components/rtx/common/index.hpp>
 #include <components/rtx/common/jobprogress.hpp>
+#include <components/rtx/frame/dielectricf0.hpp>
 #include <components/rtx/frame/frameextents.hpp>
 #include <components/rtx/frame/frameoptions.hpp>
 #include <components/rtx/frame/framepast.hpp>
@@ -103,6 +104,8 @@ namespace Rtx
         void setGamma(float gamma) override;
         void setIndirectLighting(bool traced) override;
         void setBounceRays(std::uint32_t rays) override;
+        void setDielectricF0Mode(DielectricF0Mode mode) override;
+        void setDielectricF0Base(float baseF0) override;
         void skipFrame() override;
         FrameExtents getExtents() const override;
         const RenderProfile& getProfile() const override { return mProfile; }

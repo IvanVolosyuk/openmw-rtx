@@ -2,6 +2,7 @@
 
 #include <cstdint>
 
+#include <components/rtx/frame/dielectricf0.hpp>
 #include <components/rtx/frame/upscale.hpp>
 #include <components/rtx/shaders/gbuffer.h>
 #include <components/settings/sanitizerimpl.hpp>
@@ -101,5 +102,13 @@ namespace Settings
         /// How many bounce rays the eye's surface traces a frame: `Rtx::SamplingSwitches::mBounceRays`.
         SettingValue<std::int32_t> mBounceRays{ mIndex, "RTX", "bounce rays",
             makeClampSanitizerInt(1, sMaxBounceRays) };
+
+        static constexpr float sMinDielectricF0Base = 0.0f;
+        static constexpr float sMaxDielectricF0Base = 0.1f;
+
+        /// Non-metal dielectric F0 calculation mode (`Rtx::sDielectricF0ModeNames`) and base F0 (`0.0` to `0.1`).
+        SettingValue<Rtx::DielectricF0Mode> mDielectricF0Mode{ mIndex, "RTX", "dielectric f0 mode" };
+        SettingValue<float> mDielectricF0Base{ mIndex, "RTX", "dielectric f0 base",
+            makeClampSanitizerFloat(sMinDielectricF0Base, sMaxDielectricF0Base) };
     };
 }

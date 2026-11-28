@@ -833,6 +833,36 @@
                                 <UserString key="ToolTipLayout" value="TextToolTip"/>
                                 <UserString key="Caption_Text" value="#{OMWEngine:WeatherFogDistanceHint}"/>
                             </Widget>
+
+                            <Widget type="TextBox" skin="NormalText" position="0 1422 420 18" align="Left Top" name="RayTracingDielectricF0ModeText">
+                                <Property key="Caption" value="#{OMWEngine:RayTracingDielectricF0Mode}"/>
+                                <UserString key="ToolTipType" value="Layout"/>
+                                <UserString key="ToolTipLayout" value="TextToolTip"/>
+                                <UserString key="Caption_Text" value="#{OMWEngine:RayTracingDielectricF0ModeHint}"/>
+                            </Widget>
+                            <Widget type="ComboBox" skin="MW_ComboBox" position="0 1442 420 24" align="Left Top" name="RayTracingDielectricF0ModeList">
+                                <UserString key="ToolTipType" value="Layout"/>
+                                <UserString key="ToolTipLayout" value="TextToolTip"/>
+                                <UserString key="Caption_Text" value="#{OMWEngine:RayTracingDielectricF0ModeHint}"/>
+                            </Widget>
+
+                            <Widget type="TextBox" skin="NormalText" position="0 1474 420 18" name="RayTracingDielectricF0BaseText"/>
+                            <Widget type="ScrollBar" skin="MW_HScroll" position="0 1495 420 18" name="RayTracingDielectricF0BaseSlider">
+                                <Property key="Range" value="101"/>
+                                <Property key="Page" value="1"/>
+                                <Property key="WheelPage" value="5"/>
+                                <UserString key="SettingType" value="Slider"/>
+                                <UserString key="SettingCategory" value="RTX"/>
+                                <UserString key="SettingName" value="dielectric f0 base"/>
+                                <UserString key="SettingValueType" value="Float"/>
+                                <UserString key="SettingMin" value="0.0"/>
+                                <UserString key="SettingMax" value="0.1"/>
+                                <UserString key="SettingLabelWidget" value="RayTracingDielectricF0BaseText"/>
+                                <UserString key="SettingLabelCaption" value="RayTracingDielectricF0BaseValue"/>
+                                <UserString key="ToolTipType" value="Layout"/>
+                                <UserString key="ToolTipLayout" value="TextToolTip"/>
+                                <UserString key="Caption_Text" value="#{OMWEngine:RayTracingDielectricF0BaseHint}"/>
+                            </Widget>
                         </Widget>
                     </Widget>
                 </Widget>

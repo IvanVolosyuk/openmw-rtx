@@ -415,6 +415,11 @@ namespace Rtx::Shaders
         /// Zero uses stock `FOG_VOLUME_HISTORY` (`0.9`); one clears occluded sunlight on the next frame.
         float mFogSunFade RTX_ZERO;
 
+        /// Selects the non-metal F0 calculation mode (`DIELECTRIC_F0_MODE_*` / `[RTX] dielectric f0 mode`).
+        uint mDielectricF0Mode RTX_INIT(DIELECTRIC_F0_MODE_ALBEDO_LUMA);
+        /// Base normal-incidence reflectance for non-metals across all 3 F0 modes (`[RTX] dielectric f0 base`).
+        float mDielectricF0Base RTX_INIT(DIELECTRIC_F0);
+
         /// Where every table a hit reads is. `GpuTables` says why it rides here. **Last, because it is
         /// eight-aligned and nothing before it is**: anywhere else it would pad the middle of a struct two
         /// languages have to agree on. Everything above it is four-aligned and sums to a multiple of
@@ -455,11 +460,11 @@ namespace Rtx::Shaders
 
     // Pinned for the reason `scene.h` gives: the side that writes these bytes and the side that reads
     // them are different compilers.
-    static_assert(offsetof(VisibilityConstants, mTables) == 1504, "GpuTables must land eight-aligned and last");
+    static_assert(offsetof(VisibilityConstants, mTables) == 1512, "GpuTables must land eight-aligned and last");
     static_assert(offsetof(VisibilityConstants, mTables)
-            == offsetof(VisibilityConstants, mFogSunFade) + sizeof(VisibilityConstants::mFogSunFade),
+            == offsetof(VisibilityConstants, mDielectricF0Base) + sizeof(VisibilityConstants::mDielectricF0Base),
         "no implicit pad before GpuTables: name one, so a copy carries it and a comparison reads it");
-    static_assert(sizeof(VisibilityConstants) == 1728, "VisibilityConstants must be scalar-packed on every side");
+    static_assert(sizeof(VisibilityConstants) == 1736, "VisibilityConstants must be scalar-packed on every side");
     static_assert(sizeof(PuffConstants) == 152, "PuffConstants must be scalar-packed on every side");
 #endif
 

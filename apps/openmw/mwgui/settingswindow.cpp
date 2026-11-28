@@ -48,6 +48,7 @@
 #include <components/misc/display.hpp>
 #include <components/resource/resourcesystem.hpp>
 #include <components/rtx/common/menu.hpp>
+#include <components/rtx/frame/dielectricf0.hpp>
 #include <components/rtx/frame/upscale.hpp>
 #include <components/sdlutil/sdldisplay.hpp>
 #include <components/sdlutil/vsyncmode.hpp>
@@ -189,6 +190,14 @@ namespace
         { Rtx::UpscalerChoice::Dlss, "#{OMWEngine:RayTracingUpscalerDlss}" },
     } };
     static_assert(Rtx::followsMenu(sUpscalerLabels, Rtx::sUpscalerMenu));
+
+    constexpr std::array<Rtx::MenuLabel<Rtx::DielectricF0Mode>, Rtx::sDielectricF0ModeMenu.size()>
+        sDielectricF0ModeLabels{ {
+            { Rtx::DielectricF0Mode::Fixed, "#{OMWEngine:RayTracingDielectricF0ModeFixed}" },
+            { Rtx::DielectricF0Mode::Linear, "#{OMWEngine:RayTracingDielectricF0ModeLinear}" },
+            { Rtx::DielectricF0Mode::AlbedoLuma, "#{OMWEngine:RayTracingDielectricF0ModeAlbedoLuma}" },
+        } };
+    static_assert(Rtx::followsMenu(sDielectricF0ModeLabels, Rtx::sDielectricF0ModeMenu));
 
     template <class Enum>
     void addMenuItems(MyGUI::ComboBox* box, std::span<const Rtx::MenuLabel<Enum>> labels)
@@ -341,7 +350,7 @@ namespace MWGui
 
         MyGUI::ScrollView* rayTracingScroll = nullptr;
         getWidget(rayTracingScroll, "RayTracingScroll");
-        rayTracingScroll->setCanvasSize(420, 1428);
+        rayTracingScroll->setCanvasSize(420, 1528);
         rayTracingScroll->setVisibleHScroll(false);
 
         configureWidgets(mMainWidget, true);
@@ -370,10 +379,15 @@ namespace MWGui
         getWidget(mScriptDisabled, "ScriptDisabled");
         getWidget(mRayTracingUpscale, "RayTracingUpscaleList");
         getWidget(mRayTracingUpscaler, "RayTracingUpscalerList");
+        getWidget(mRayTracingDielectricF0Mode, "RayTracingDielectricF0ModeList");
 
         addMenuItems<Rtx::Upscale>(mRayTracingUpscale, sUpscaleLabels);
         mRayTracingUpscale->eventComboChangePosition
             += MyGUI::newDelegate(this, &SettingsWindow::onRayTracingUpscaleChanged);
+
+        addMenuItems<Rtx::DielectricF0Mode>(mRayTracingDielectricF0Mode, sDielectricF0ModeLabels);
+        mRayTracingDielectricF0Mode->eventComboChangePosition
+            += MyGUI::newDelegate(this, &SettingsWindow::onRayTracingDielectricF0ModeChanged);
 
         // Each offered choice by its own label, looked up and not read by position: the renderer offers what this
         // machine runs, which need not be the menu's first entries.
@@ -618,6 +632,16 @@ namespace MWGui
         apply();
         MWBase::Environment::get().getWindowManager()->interactiveMessageBox(
             "#{OMWEngine:ChangeRequiresRestart}", { "#{Interface:OK}" }, true);
+    }
+
+    void SettingsWindow::onRayTracingDielectricF0ModeChanged(MyGUI::ComboBox* /*sender*/, std::size_t pos)
+    {
+        const std::optional<Rtx::DielectricF0Mode> chosen = Rtx::menuValue(Rtx::sDielectricF0ModeMenu, pos);
+        if (!chosen.has_value())
+            return;
+
+        Settings::rtx().mDielectricF0Mode.set(*chosen);
+        apply();
     }
 
     void SettingsWindow::onWindowModeChanged(MyGUI::ComboBox* sender, std::size_t pos)
@@ -868,6 +892,8 @@ namespace MWGui
         mRayTracingUpscaler->setIndexSelected(upscaler != mUpscalers.end()
                 ? static_cast<std::size_t>(std::distance(mUpscalers.begin(), upscaler))
                 : MyGUI::ITEM_NONE);
+        mRayTracingDielectricF0Mode->setIndexSelected(
+            Rtx::menuIndex(Rtx::sDielectricF0ModeMenu, Settings::rtx().mDielectricF0Mode.get()).value());
         updateUpscaleList();
         updateBounceRaysSlider();
     }

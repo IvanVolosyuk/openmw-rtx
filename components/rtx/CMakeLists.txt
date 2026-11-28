@@ -241,6 +241,7 @@ openmw_rtx_layer(
         frame/bluenoise.hpp
         frame/camera.hpp
         frame/debuglines.hpp
+        frame/dielectricf0.hpp
         frame/frameextents.hpp
         frame/frameoptions.hpp
         frame/framepast.hpp

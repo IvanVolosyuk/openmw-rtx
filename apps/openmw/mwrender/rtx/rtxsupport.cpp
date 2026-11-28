@@ -100,6 +100,8 @@ namespace MWRender
             { "RTX", "actor glow clearance", {} },
             { "RTX", "actor glow source size", {} },
             { "RTX", "bounce rays", {} },
+            { "RTX", "dielectric f0 base", {} },
+            { "RTX", "dielectric f0 mode", {} },
             { "RTX", "distant land cells", {} },
             { "RTX", "indirect lighting", {} },
             { "RTX", "interior sunlight strength", {} },

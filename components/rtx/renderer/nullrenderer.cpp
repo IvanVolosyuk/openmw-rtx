@@ -165,6 +165,16 @@ namespace Rtx
         mProfile.mReconstruction.mSampling.mBounceRays = rays;
     }
 
+    void NullRenderer::setDielectricF0Mode(const DielectricF0Mode mode)
+    {
+        mProfile.mDielectricF0Mode = mode;
+    }
+
+    void NullRenderer::setDielectricF0Base(const float baseF0)
+    {
+        mProfile.mDielectricF0Base = baseF0;
+    }
+
     FrameTraced NullRenderer::renderFrame(const FrameRequest& request)
     {
         assert(mWorld.mIdentity != SceneIdentity{} && "a frame traced before the world's scene was set");

@@ -709,6 +709,16 @@ namespace Rtx
         }
     }
 
+    void VulkanRenderer::setDielectricF0Mode(const DielectricF0Mode mode)
+    {
+        mProfile.mDielectricF0Mode = mode;
+    }
+
+    void VulkanRenderer::setDielectricF0Base(const float baseF0)
+    {
+        mProfile.mDielectricF0Base = baseF0;
+    }
+
     void VulkanRenderer::skipFrame()
     {
         if (mRing.isOpen())

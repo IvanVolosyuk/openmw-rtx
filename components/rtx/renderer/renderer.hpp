@@ -18,6 +18,7 @@
 #include <components/rtx/common/jobprogress.hpp>
 #include <components/rtx/common/namedenum.hpp>
 #include <components/rtx/frame/camera.hpp>
+#include <components/rtx/frame/dielectricf0.hpp>
 #include <components/rtx/frame/frameoptions.hpp>
 #include <components/rtx/frame/reconstruction.hpp>
 #include <components/rtx/frame/upscale.hpp>
@@ -632,6 +633,12 @@ namespace Rtx
         /// run: a slider moved in the menu, and the next frame traces that many. From one to
         /// `Shaders::MAX_BOUNCE_RAYS`: a caller that reads it from a file refuses anything else first.
         virtual void setBounceRays(std::uint32_t rays) = 0;
+
+        /// `RenderProfile::mDielectricF0Mode`, changed while the frames run: a mode chosen in the menu.
+        virtual void setDielectricF0Mode(DielectricF0Mode mode) = 0;
+
+        /// `RenderProfile::mDielectricF0Base`, changed while the frames run: a slider moved in the menu.
+        virtual void setDielectricF0Base(float baseF0) = 0;
 
         /// How many of `set`'s kernels are made, waiting `patience` at most for the rest, and
         /// rethrowing what making one threw. The renderer starts making them as it is made, on

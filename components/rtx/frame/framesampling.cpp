@@ -66,6 +66,8 @@ namespace Rtx
 
         sampled.mShow = static_cast<std::uint32_t>(options.mShow.value_or(profile.mShow));
         sampled.mLitEnvironmentMaps = options.mLitEnvironmentMaps.value_or(profile.mLitEnvironmentMaps) ? 1u : 0u;
+        sampled.mDielectricF0Mode = static_cast<std::uint32_t>(options.mDielectricF0Mode.value_or(profile.mDielectricF0Mode));
+        sampled.mDielectricF0Base = options.mDielectricF0Base.value_or(profile.mDielectricF0Base);
 
         // The arms' eye samples where the world's does, or the two halves of one frame would be
         // reconstructed from two grids.

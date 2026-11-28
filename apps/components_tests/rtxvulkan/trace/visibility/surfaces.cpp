@@ -2705,11 +2705,11 @@ namespace Rtx::Testing
         /// **The frame is the layers' one**: the tangent x less its part along N, the bitangent
         /// `cross(N, T)` — for N of `(0, -1, 0)` that is `(0, 0, 1)` — and N. Column 0 is layer zero alone, so its
         /// normal is `normalize(0.498039 x + 0.003922 z - 0.733333 y)`, and it has no lobe: a roughness of one and no
-        /// reflectance. Column 63 is layer one alone: N, its roughness, and `TERRAIN_DIELECTRIC_F0`. Column 31 weighs layer one
-        /// 0.484375 (the ramp above), so it reflects 0.484375 of 0.006 at a roughness of `0.515625 + 0.484375 ×
-        /// 0.250980`, under the blend of the two normals.
+        /// reflectance. Column 63 is layer one alone: N, its roughness, and `dielectricF0(roughness)`. Column 31 weighs layer one
+        /// 0.484375 (the ramp above), so at a roughness of `0.515625 + 0.484375 ×
+        /// 0.250980`, it reflects 0.484375 of `dielectricF0(roughness)` under the blend of the two normals.
         ///
-        /// **Flattened, the chunk reads its gloss**: a reflectance of `TERRAIN_DIELECTRIC_F0` times its red and
+        /// **Flattened, the chunk reads its gloss**: a reflectance of `dielectricF0(roughness)` times its red and
         /// a roughness of its green, under the card's own normal. The game's `CompositeQueue` bakes
         /// the two images; here they are stood as the textures a bake leaves, a gloss of
         /// `(128, 64)`, since this renderer has no queue and `RtxGroundCompositePassTest` holds the
@@ -2781,7 +2781,8 @@ namespace Rtx::Testing
 
                       scene.addInstance(MeshInstance{ .mMesh = mesh, .mMaterial = scene.addMaterial(material) });
 
-                      const Frame frame = shoot(scene, described, camera, size, Shot{ .mShow = show });
+                      const Frame frame = shoot(scene, described, camera, size,
+                          Shot{ .mShow = show, .mDielectricF0Mode = DielectricF0Mode::Linear });
                       EXPECT_EQ(frame.mHits, size * size);
 
                       std::array<osg::Vec3f, 3> columns;
@@ -2822,9 +2823,10 @@ namespace Rtx::Testing
             EXPECT_NEAR(stackRough[2].x(), rough, 1e-6f);
 
             const std::array stackSpecular = render(SurfaceView::Specular, false);
+            const float stackRough1 = (1.0f - second) + second * rough;
             EXPECT_EQ(stackSpecular[0].x(), 0.0f) << "a Lambert layer alone reflects nothing";
-            EXPECT_NEAR(stackSpecular[1].x(), Shaders::TERRAIN_DIELECTRIC_F0 * second, 1e-7f);
-            EXPECT_NEAR(stackSpecular[2].x(), Shaders::TERRAIN_DIELECTRIC_F0, 1e-7f);
+            EXPECT_NEAR(stackSpecular[1].x(), Shaders::dielectricF0(stackRough1) * second, 1e-7f);
+            EXPECT_NEAR(stackSpecular[2].x(), Shaders::dielectricF0(rough), 1e-7f);
 
             const std::array flatNormal = render(SurfaceView::Normal, true);
             const std::array flatRough = render(SurfaceView::Roughness, true);
@@ -2835,7 +2837,7 @@ namespace Rtx::Testing
                     EXPECT_NEAR(flatNormal[at][axis], carried(osg::Vec3f(0.0f, 0.0f, 1.0f))[axis], 1e-6f)
                         << "flattened column " << at << " axis " << axis;
                 EXPECT_EQ(flatRough[at].x(), 64.0f / 255.0f) << "flattened column " << at;
-                EXPECT_NEAR(flatSpecular[at].x(), Shaders::TERRAIN_DIELECTRIC_F0 * 128.0f / 255.0f, 1e-7f)
+                EXPECT_NEAR(flatSpecular[at].x(), Shaders::dielectricF0(64.0f / 255.0f) * 128.0f / 255.0f, 1e-7f)
                     << "flattened column " << at;
             }
 

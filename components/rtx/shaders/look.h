@@ -402,10 +402,41 @@ namespace Rtx::Shaders
     /// Morrowind mesh).
     const float DIELECTRIC_F0 = 0.04f;
 
-    /// The reflectance at normal incidence of authored terrain layers (`_diffusespec`): lower than
-    /// `DIELECTRIC_F0` so rough soil and dry grass do not glaze silver at grazing angles
-    /// (`SPECULAR_EDGE_SCALE` scales grazing F90 down to 0.30 with it).
-    const float TERRAIN_DIELECTRIC_F0 = 0.006f;
+    /// Perceptual roughness where a non-metal's F0 starts decaying linearly below `DIELECTRIC_F0`
+    /// so rough wood, soil, and dry grass do not glaze silver at grazing angles while smooth or wet
+    /// surfaces keep full 4% dielectric Fresnel.
+    const float DIELECTRIC_F0_DECAY_START = 0.50f;
+
+    /// Perceptual roughness at which a non-metal's F0 reaches `DIELECTRIC_F0_FLOOR`.
+    const float DIELECTRIC_F0_DECAY_END = 0.90f;
+
+    /// Floor normal-incidence reflectance for ultra-rough non-metals (`roughness >= DIELECTRIC_F0_DECAY_END`).
+    /// With `SPECULAR_EDGE_SCALE = 50`, grazing F90 scales down to 0.05.
+    const float DIELECTRIC_F0_FLOOR = 0.001f;
+
+    /// Non-metal specular F0 algorithm (`[RTX] dielectric f0 mode` / `VisibilityConstants::mDielectricF0Mode`).
+    const uint DIELECTRIC_F0_MODE_FIXED = 0u;
+    const uint DIELECTRIC_F0_MODE_LINEAR = 1u;
+    const uint DIELECTRIC_F0_MODE_ALBEDO_LUMA = 2u;
+
+    /// Rough albedo-luminance cavity F0 modulation (`DIELECTRIC_F0_MODE_ALBEDO_LUMA`), attenuating matte
+    /// rough F0 in dark crevices while keeping mid-roughness and smooth dielectrics at full base F0.
+    const float DIELECTRIC_ALBEDO_CAVITY_START = 0.55f;
+    const float DIELECTRIC_ALBEDO_CAVITY_END = 0.95f;
+    const float DIELECTRIC_ALBEDO_CAVITY_STRENGTH = 0.85f;
+    const float DIELECTRIC_ALBEDO_CAVITY_REF_LUMA = 0.18f;
+    const float DIELECTRIC_ALBEDO_CAVITY_POWER = 0.55f;
+    const float DIELECTRIC_ALBEDO_CAVITY_FLOOR = 0.08f;
+
+    /// Roughness-attenuated grazing Fresnel `F90` for matte dielectrics (`DIELECTRIC_F0_MODE_ALBEDO_LUMA`).
+    const float DIELECTRIC_F90_DECAY_START = 0.30f;
+    const float DIELECTRIC_F90_FLOOR = 0.10f;
+
+    /// Lagarde (2014) specular occlusion parameters (`DIELECTRIC_F0_MODE_ALBEDO_LUMA`).
+    const float DIELECTRIC_SPEC_AO_IND = 1.00f;
+    const float DIELECTRIC_SPEC_AO_DIR = 0.70f;
+    const float DIELECTRIC_SPEC_AO_POWER = 1.20f;
+    const float DIELECTRIC_GRASS_HEIGHT_AO = 0.60f;
 
     /// How much perceptual roughness rain takes off exposed reflecting terrain at full rain
     /// (`mRainOnWater == 1`), held at `ROUGHNESS_FLOOR` before footprint widening.

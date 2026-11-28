@@ -11,6 +11,7 @@
 
 #include <components/debug/debuglog.hpp>
 #include <components/detournavigator/collisionshapetype.hpp>
+#include <components/rtx/frame/dielectricf0.hpp>
 #include <components/rtx/frame/upscale.hpp>
 #include <components/vfs/pathutil.hpp>
 
@@ -46,6 +47,7 @@ namespace Settings
         NormalizedPath,
         Upscale,
         Upscaler,
+        DielectricF0Mode,
     };
 
     template <class T>
@@ -193,6 +195,12 @@ namespace Settings
         return SettingValueType::Upscaler;
     }
 
+    template <>
+    inline constexpr SettingValueType getSettingValueType<Rtx::DielectricF0Mode>()
+    {
+        return SettingValueType::DielectricF0Mode;
+    }
+
     inline constexpr std::string_view getSettingValueTypeName(SettingValueType type)
     {
         switch (type)
@@ -243,6 +251,8 @@ namespace Settings
                 return "upscale mode";
             case SettingValueType::Upscaler:
                 return "upscaler";
+            case SettingValueType::DielectricF0Mode:
+                return "dielectric f0 mode";
         }
         return "unsupported";
     }

@@ -6,6 +6,7 @@
 
 #include <components/files/configurationmanager.hpp>
 #include <components/lua_ui/adapter.hpp>
+#include <components/rtx/frame/dielectricf0.hpp>
 #include <components/rtx/frame/upscale.hpp>
 
 #include "windowbase.hpp"
@@ -57,6 +58,7 @@ namespace MWGui
 
         MyGUI::ComboBox* mRayTracingUpscale{};
         MyGUI::ComboBox* mRayTracingUpscaler{};
+        MyGUI::ComboBox* mRayTracingDielectricF0Mode{};
         MyGUI::ScrollBar* mRayTracingBounceRays{};
         MyGUI::ScrollBar* mRayTracingInteriorSunlightStrength{};
         MyGUI::ScrollBar* mRayTracingInteriorWindowSkylight{};
@@ -102,6 +104,7 @@ namespace MWGui
         void onVSyncModeChanged(MyGUI::ComboBox* sender, std::size_t pos);
         void onRayTracingUpscaleChanged(MyGUI::ComboBox* sender, std::size_t pos);
         void onRayTracingUpscalerChanged(MyGUI::ComboBox* sender, std::size_t pos);
+        void onRayTracingDielectricF0ModeChanged(MyGUI::ComboBox* sender, std::size_t pos);
 
         void onRebindAction(MyGUI::Widget* sender);
         void onInputTabMouseWheel(MyGUI::Widget* sender, std::int32_t rel);

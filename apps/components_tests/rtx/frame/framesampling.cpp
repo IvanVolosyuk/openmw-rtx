@@ -38,22 +38,36 @@ namespace Rtx
         /// trace what nobody asked.
         TEST(RtxFrameSamplingTest, theProfileAnswersWhatTheFrameDidNotAsk)
         {
-            const RenderProfile profile{ .mLitEnvironmentMaps = true, .mShow = SurfaceView::Albedo };
+            const RenderProfile profile{
+                .mLitEnvironmentMaps = true,
+                .mDielectricF0Mode = DielectricF0Mode::Fixed,
+                .mDielectricF0Base = 0.02f,
+                .mShow = SurfaceView::Albedo,
+            };
 
             const Shaders::VisibilityConstants played
                 = sampleFrame(stated(), FrameOptions{}, profile, Reconstruction{}, InstanceCounts{}, nullptr);
             EXPECT_EQ(played.mShow, static_cast<std::uint32_t>(SurfaceView::Albedo));
             EXPECT_EQ(played.mLitEnvironmentMaps, 1u);
-            EXPECT_EQ(
-                sampleFrame(stated(), FrameOptions{}, RenderProfile{}, Reconstruction{}, InstanceCounts{}, nullptr)
-                    .mLitEnvironmentMaps,
-                0u)
-                << "the setting's default";
+            EXPECT_EQ(played.mDielectricF0Mode, Shaders::DIELECTRIC_F0_MODE_FIXED);
+            EXPECT_FLOAT_EQ(played.mDielectricF0Base, 0.02f);
+            const Shaders::VisibilityConstants defaults
+                = sampleFrame(stated(), FrameOptions{}, RenderProfile{}, Reconstruction{}, InstanceCounts{}, nullptr);
+            EXPECT_EQ(defaults.mLitEnvironmentMaps, 0u) << "the setting's default";
+            EXPECT_EQ(defaults.mDielectricF0Mode, Shaders::DIELECTRIC_F0_MODE_ALBEDO_LUMA) << "the setting's default";
+            EXPECT_FLOAT_EQ(defaults.mDielectricF0Base, Shaders::DIELECTRIC_F0) << "the setting's default";
 
             // And the frame's own ask stands over it, which is how a test of one input asks for it.
             const Shaders::VisibilityConstants asked = sampleFrame(stated(),
-                FrameOptions{ .mShow = SurfaceView::Shaded }, profile, Reconstruction{}, InstanceCounts{}, nullptr);
+                FrameOptions{
+                    .mShow = SurfaceView::Shaded,
+                    .mDielectricF0Mode = DielectricF0Mode::Linear,
+                    .mDielectricF0Base = 0.06f,
+                },
+                profile, Reconstruction{}, InstanceCounts{}, nullptr);
             EXPECT_EQ(asked.mShow, static_cast<std::uint32_t>(SurfaceView::Shaded));
+            EXPECT_EQ(asked.mDielectricF0Mode, Shaders::DIELECTRIC_F0_MODE_LINEAR);
+            EXPECT_FLOAT_EQ(asked.mDielectricF0Base, 0.06f);
         }
 
         /// Every field the sampling writes comes from the sampling, and each from the input that
